@@ -1,0 +1,1468 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:async/async.dart';
+import 'package:vivahbharath_app/model/all_matches_model.dart';
+import 'package:vivahbharath_app/model/basic_info_model.dart';
+import 'package:vivahbharath_app/model/blood_group.dart';
+import 'package:vivahbharath_app/model/body_type.dart';
+import 'package:vivahbharath_app/model/cast_model.dart';
+import 'package:vivahbharath_app/model/chat_model.dart';
+import 'package:vivahbharath_app/model/choices_model.dart';
+import 'package:vivahbharath_app/model/choose_subscription_model.dart';
+import 'package:vivahbharath_app/model/community_location.dart';
+import 'package:vivahbharath_app/model/contacts_viewed_by_me_model.dart';
+import 'package:vivahbharath_app/model/contacts_viewed_you_model.dart';
+import 'package:vivahbharath_app/model/countries_model.dart';
+import 'package:vivahbharath_app/model/created_for_model.dart';
+import 'package:vivahbharath_app/model/curriencies_model.dart';
+import 'package:vivahbharath_app/model/dashboard_model.dart';
+import 'package:vivahbharath_app/model/diets_model.dart';
+import 'package:vivahbharath_app/model/district_model.dart';
+import 'package:vivahbharath_app/model/education_model.dart';
+import 'package:vivahbharath_app/model/error_response_model.dart';
+import 'package:vivahbharath_app/model/family_model.dart';
+import 'package:vivahbharath_app/model/family_statuses.dart';
+import 'package:vivahbharath_app/model/family_type_model.dart';
+import 'package:vivahbharath_app/model/family_values_model.dart';
+import 'package:vivahbharath_app/model/gender_model.dart';
+import 'package:vivahbharath_app/model/get_subscriptionmodel.dart';
+import 'package:vivahbharath_app/model/gotar_model.dart';
+import 'package:vivahbharath_app/model/hobbies_model.dart';
+import 'package:vivahbharath_app/model/hobby_info_model.dart';
+import 'package:vivahbharath_app/model/horoscope_model.dart';
+import 'package:vivahbharath_app/model/image_types_model.dart';
+import 'package:vivahbharath_app/model/income_model.dart';
+import 'package:vivahbharath_app/model/interest_received_all.dart';
+import 'package:vivahbharath_app/model/interest_recevied_model.dart';
+import 'package:vivahbharath_app/model/interest_send_model.dart';
+import 'package:vivahbharath_app/model/job_industries_model.dart';
+import 'package:vivahbharath_app/model/marital_statuses_model.dart';
+import 'package:vivahbharath_app/model/mother_tongue.dart';
+import 'package:vivahbharath_app/model/new_matches_model.dart';
+import 'package:vivahbharath_app/model/occupations_model.dart';
+import 'package:vivahbharath_app/model/personal_model.dart';
+import 'package:vivahbharath_app/model/photos_model.dart';
+import 'package:vivahbharath_app/model/professional_model.dart';
+import 'package:vivahbharath_app/model/religions_model.dart';
+import 'package:vivahbharath_app/model/request_model.dart';
+import 'package:vivahbharath_app/model/request_send_model.dart';
+import 'package:vivahbharath_app/model/residiential_model.dart';
+import 'package:vivahbharath_app/model/respond_interest_model.dart';
+import 'package:vivahbharath_app/model/respond_request_model.dart';
+import 'package:vivahbharath_app/model/search_body.dart';
+import 'package:vivahbharath_app/model/search_model.dart';
+import 'package:vivahbharath_app/model/shortlist_model.dart';
+import 'package:vivahbharath_app/model/shortlisted_by_you_model.dart';
+import 'package:vivahbharath_app/model/shortlisted_you_model.dart';
+import 'package:vivahbharath_app/model/sign_in_model.dart';
+import 'package:vivahbharath_app/model/signup_model.dart';
+import 'package:vivahbharath_app/model/skin_type_model.dart';
+import 'package:vivahbharath_app/model/stars_model.dart';
+import 'package:vivahbharath_app/model/states_model.dart';
+import 'package:vivahbharath_app/model/subcaste_model.dart';
+import 'package:vivahbharath_app/model/value_slab_model.dart';
+import 'package:vivahbharath_app/model/verify_otp_model.dart';
+import 'package:vivahbharath_app/model/viewed_by_me_model.dart';
+import 'package:vivahbharath_app/model/viewed_me_model.dart';
+import 'app_exceptions.dart';
+import 'base_client.dart';
+import 'shared_preference_helper.dart';
+
+class ServiceConfig {
+  static String _extractErrorMessage(
+    String? rawBody, {
+    String fallback = 'Something went wrong',
+  }) {
+    if (rawBody != null && rawBody.trimLeft().startsWith('<')) {
+      return 'Your session has expired. Please verify your mobile number again.';
+    }
+    try {
+      final decoded = jsonDecode(rawBody ?? '{}');
+      if (decoded is Map) {
+        // Backend sends field errors as "error" or "errors", e.g.
+        // {"error":{"mobile_number":["The mobile number has already been taken."]}}
+        // and sometimes a plain string: {"error":"Invalid OTP"}.
+        for (final key in const ['errors', 'error']) {
+          final messages = _collectMessages(decoded[key]);
+          if (messages.isNotEmpty) return messages.join('\n');
+        }
+        final message = decoded['message'];
+        if (message is String && message.trim().isNotEmpty) return message;
+      }
+    } catch (_) {
+      // Not JSON: show plain-text bodies as-is (short ones only).
+      final text = rawBody?.trim() ?? '';
+      if (text.isNotEmpty && text.length <= 200) return text;
+    }
+    return fallback;
+  }
+
+  // Flattens a Laravel-style error value (Map of field -> [messages], List or
+  // String) into a list of messages.
+  static List<String> _collectMessages(dynamic value) {
+    if (value == null) return [];
+    if (value is String) return value.trim().isEmpty ? [] : [value.trim()];
+    if (value is List) return value.expand(_collectMessages).toList();
+    if (value is Map) return value.values.expand(_collectMessages).toList();
+    return [value.toString()];
+  }
+
+  Future<Result> getCreatedFor() async {
+    Result res = await BaseClient.get('created-fors');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      CreatedForModel createdForModel = CreatedForModel.fromJson(response);
+      return (createdForModel.createdFors != null &&
+              createdForModel.createdFors.isNotEmpty)
+          ? Result.value(createdForModel)
+          : Result.error(createdForModel);
+    }
+  }
+
+  Future<Result> getMotherTongue() async {
+    Result res = await BaseClient.get('languages');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      MotherTongueModel motherTongueModel = MotherTongueModel.fromJson(
+        response,
+      );
+      return (motherTongueModel.languages != null &&
+              motherTongueModel.languages.isNotEmpty)
+          ? Result.value(motherTongueModel)
+          : Result.error(motherTongueModel);
+    }
+  }
+
+  Future<Result> signUp(
+    int createdforid,
+    String name,
+    int mothertongueid,
+    String mobilenumber,
+  ) async {
+    try {
+      Result res = await BaseClient.post(
+        'signup',
+        body: {
+          'created_for_id': createdforid,
+          'name': name,
+          'mother_tongue_id': mothertongueid,
+          'mobile_number': mobilenumber,
+        },
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('signup response $response');
+        SignupModel signUpResponseModel = SignupModel.fromJson(response);
+        return signUpResponseModel.error == null
+            ? Result.value(signUpResponseModel)
+            : Result.error(signUpResponseModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('signup validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(errorMessage: _extractErrorMessage(e.message)),
+      );
+    }
+  }
+
+  Future<Result> verifyOtp(String mobilenumber, int otp) async {
+    try {
+      Result res = await BaseClient.post(
+        'verify-otp',
+        // API expects the number under "mobile" (422 "The mobile field is required" otherwise)
+        body: {'mobile': mobilenumber, 'otp': otp},
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('verify otp response $response');
+        VerifyOtpModel verifyOtpModel = VerifyOtpModel.fromJson(response);
+        if (verifyOtpModel.token.isNotEmpty) {
+          await SharedPreferenceHelper.saveToken(verifyOtpModel.token);
+        }
+        return verifyOtpModel.token.isNotEmpty
+            ? Result.value(verifyOtpModel)
+            : Result.error(
+                ErrorResponseModel(
+                  errorMessage: 'Invalid OTP. Please try again',
+                ),
+              );
+      }
+    } on AppException catch (e) {
+      debugPrint('verify otp validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Invalid OTP. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> getGenders() async {
+    Result res = await BaseClient.get('genders');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      GenderModel genderModel = GenderModel.fromJson(response);
+      return (genderModel.genders != null && genderModel.genders.isNotEmpty)
+          ? Result.value(genderModel)
+          : Result.error(genderModel);
+    }
+  }
+
+  Future<Result> basicInfo(
+    String email,
+    String password,
+    String passwordconfirmation,
+    String dob,
+    int genderid,
+  ) async {
+    try {
+      Result res = await BaseClient.post(
+        'basic-info',
+        body: {
+          'email': email,
+          'password': password,
+          'password_confirmation': passwordconfirmation,
+          'dob': dob,
+          'gender_id': genderid,
+        },
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('basic info response $response');
+        BasicInfoModel basicInfoModel = BasicInfoModel.fromJson(response);
+        return Result.value(basicInfoModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('basic info validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> getReligion() async {
+    Result res = await BaseClient.get('religions');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ReligionsModel religionModel = ReligionsModel.fromJson(response);
+      return (religionModel.religions != null &&
+              religionModel.religions.isNotEmpty)
+          ? Result.value(religionModel)
+          : Result.error(religionModel);
+    }
+  }
+
+  Future<Result> getCast(int religionid) async {
+    Result res = await BaseClient.get('castes/$religionid');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      CastModel castesModel = CastModel.fromJson(response);
+      return (castesModel.castes != null && castesModel.castes.isNotEmpty)
+          ? Result.value(castesModel)
+          : Result.error(castesModel);
+    }
+  }
+
+  Future<Result> getSubCast(int castid) async {
+    Result res = await BaseClient.get('sub-castes/$castid');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      SubcastesModel subCastModel = SubcastesModel.fromJson(response);
+      return (subCastModel.subCastes != null &&
+              subCastModel.subCastes.isNotEmpty)
+          ? Result.value(subCastModel)
+          : Result.error(subCastModel);
+    }
+  }
+
+  Future<Result> getGotra() async {
+    Result res = await BaseClient.get('gotras');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      GotrasModel gotraModel = GotrasModel.fromJson(response);
+      return (gotraModel.gotras != null && gotraModel.gotras.isNotEmpty)
+          ? Result.value(gotraModel)
+          : Result.error(gotraModel);
+    }
+  }
+
+  Future<Result> getCountries() async {
+    Result res = await BaseClient.get('countries');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      CountriesModel countriesModel = CountriesModel.fromJson(response);
+      return (countriesModel.countries != null &&
+              countriesModel.countries.isNotEmpty)
+          ? Result.value(countriesModel)
+          : Result.error(countriesModel);
+    }
+  }
+
+  Future<Result> getStates(int countryid) async {
+    Result res = await BaseClient.get('states/$countryid');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      StatesModel statesModel = StatesModel.fromJson(response);
+      return (statesModel.states != null && statesModel.states.isNotEmpty)
+          ? Result.value(statesModel)
+          : Result.error(statesModel);
+    }
+  }
+
+  Future<Result> getDistricts(int stateid) async {
+    Result res = await BaseClient.get('districts/$stateid');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      DistrictModel districtsModel = DistrictModel.fromJson(response);
+      return (districtsModel.districts != null &&
+              districtsModel.districts.isNotEmpty)
+          ? Result.value(districtsModel)
+          : Result.error(districtsModel);
+    }
+  }
+
+  Future<Result> communityandLocation(
+    int nativecountryid,
+    int nativestateid,
+    int nativedistrictid,
+    String nativedescription,
+    int permanentcountryid,
+    int permanentstateid,
+    int permanentdistrictid,
+    String permanentaddress,
+    String permanentpincode,
+    int currentcountryid,
+    int currentstateid,
+    int currentdistrictid,
+    String currentaddress,
+    String currentpincode,
+    int religionid,
+    int casteid,
+    int subcasteid,
+    int gotraid,
+    String castematch,
+  ) async {
+    try {
+      Result res = await BaseClient.post(
+        'community-location',
+        body: {
+          'native_country_id': nativecountryid,
+          'native_state_id': nativestateid,
+          "native_district_id": nativedistrictid,
+          "native_description": nativedescription,
+          "permanent_country_id": permanentcountryid,
+          "permanent_state_id": permanentstateid,
+          "permanent_district_id": permanentdistrictid,
+          "permanent_address": permanentaddress,
+          "permanent_pincode": permanentpincode,
+          "current_country_id": currentcountryid,
+          "current_state_id": currentstateid,
+          "current_district_id": currentdistrictid,
+          "current_address": currentaddress,
+          "current_pincode": currentpincode,
+          "religion_id": religionid,
+          "caste_id": casteid,
+          "sub_caste_id": subcasteid,
+          "gotra_id": gotraid,
+          "caste_match": castematch,
+        },
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('community and location response $response');
+        CommunityLocationModel communityAndLocationModel =
+            CommunityLocationModel.fromJson(response);
+        return Result.value(communityAndLocationModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('community and location validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> getEducation() async {
+    Result res = await BaseClient.get('educations');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      EducationModel educationModel = EducationModel.fromJson(response);
+      return (educationModel.educations != null &&
+              educationModel.educations.isNotEmpty)
+          ? Result.value(educationModel)
+          : Result.error(educationModel);
+    }
+  }
+
+  Future<Result> getEmployementType() async {
+    Result res = await BaseClient.get('job-industries');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      JobIndustriesModel jobIndustriesModel = JobIndustriesModel.fromJson(
+        response,
+      );
+      return (jobIndustriesModel.jobIndustries != null &&
+              jobIndustriesModel.jobIndustries.isNotEmpty)
+          ? Result.value(jobIndustriesModel)
+          : Result.error(jobIndustriesModel);
+    }
+  }
+
+  Future<Result> getOccupation() async {
+    Result res = await BaseClient.get('occupations');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      OccupationsModel occupationsModel = OccupationsModel.fromJson(response);
+      return (occupationsModel.occupations != null &&
+              occupationsModel.occupations.isNotEmpty)
+          ? Result.value(occupationsModel)
+          : Result.error(occupationsModel);
+    }
+  }
+
+  Future<Result> getResidentialStatus() async {
+    Result res = await BaseClient.get('residential-statuses');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ResidentialModel residentialModel = ResidentialModel.fromJson(response);
+      return (residentialModel.residentialStatuses != null &&
+              residentialModel.residentialStatuses.isNotEmpty)
+          ? Result.value(residentialModel)
+          : Result.error(residentialModel);
+    }
+  }
+
+  Future<Result> getCurrencies() async {
+    Result res = await BaseClient.get('currencies');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      CurrenciesModel currenciesModel = CurrenciesModel.fromJson(response);
+      return (currenciesModel.currencies != null &&
+              currenciesModel.currencies.isNotEmpty)
+          ? Result.value(currenciesModel)
+          : Result.error(currenciesModel);
+    }
+  }
+
+  Future<Result> getIncome(int currencyid) async {
+    Result res = await BaseClient.get('incomes/$currencyid');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      IncomeModel incomeModel = IncomeModel.fromJson(response);
+      return (incomeModel.incomes != null && incomeModel.incomes.isNotEmpty)
+          ? Result.value(incomeModel)
+          : Result.error(incomeModel);
+    }
+  }
+
+  Future<Result> professionalDetails(
+    int highesteducationid,
+    String educationdesc,
+    int jobindustryid,
+    int occupationid,
+    int workingcountryid,
+    int workingstateid,
+    int workingdistrictid,
+    int residentialstatusid,
+    int currencyid,
+    int incomeslabid,
+    List<int> languages,
+  ) async {
+    try {
+      Result res = await BaseClient.post(
+        'professional-info',
+        body: {
+          "highest_education_id": highesteducationid,
+          "education_desc": educationdesc,
+          "job_industry_id": jobindustryid,
+          "occupation_id": occupationid,
+          "working_country_id": workingcountryid,
+          "working_state_id": workingstateid,
+          "working_district_id": workingdistrictid,
+          "residential_status_id": residentialstatusid,
+          "currency_id": currencyid,
+          "income_slab_id": incomeslabid,
+          "languages": languages,
+        },
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('Professional info response $response');
+        ProfessionalModel professionalModel = ProfessionalModel.fromJson(
+          response,
+        );
+        return Result.value(professionalModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('Professional info validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> getMatrialStatues() async {
+    Result res = await BaseClient.get('marital-statuses');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      MaritalStatusesModel maritalStatusesModel = MaritalStatusesModel.fromJson(
+        response,
+      );
+      return (maritalStatusesModel.maritalStatuses != null &&
+              maritalStatusesModel.maritalStatuses.isNotEmpty)
+          ? Result.value(maritalStatusesModel)
+          : Result.error(maritalStatusesModel);
+    }
+  }
+
+  Future<Result> getSkinColor() async {
+    Result res = await BaseClient.get('skin-types');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      SkinTypeModel skinTypeModel = SkinTypeModel.fromJson(response);
+      return (skinTypeModel.skinTypes != null &&
+              skinTypeModel.skinTypes.isNotEmpty)
+          ? Result.value(skinTypeModel)
+          : Result.error(skinTypeModel);
+    }
+  }
+
+  Future<Result> getBodyType() async {
+    Result res = await BaseClient.get('body-types');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      BodyTypesModel bodyTypeModel = BodyTypesModel.fromJson(response);
+      return (bodyTypeModel.bodyTypes != null &&
+              bodyTypeModel.bodyTypes.isNotEmpty)
+          ? Result.value(bodyTypeModel)
+          : Result.error(bodyTypeModel);
+    }
+  }
+
+  Future<Result> getBloodGroup() async {
+    Result res = await BaseClient.get('blood-groups');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      BloodGroupModel bloodGroupModel = BloodGroupModel.fromJson(response);
+      return (bloodGroupModel.bloodGroups != null &&
+              bloodGroupModel.bloodGroups.isNotEmpty)
+          ? Result.value(bloodGroupModel)
+          : Result.error(bloodGroupModel);
+    }
+  }
+
+  Future<Result> getDiets() async {
+    Result res = await BaseClient.get('diets');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      DietsModel dietsModel = DietsModel.fromJson(response);
+      return (dietsModel.diets != null && dietsModel.diets.isNotEmpty)
+          ? Result.value(dietsModel)
+          : Result.error(dietsModel);
+    }
+  }
+
+  Future<Result> getChoices() async {
+    Result res = await BaseClient.get('choices');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ChoicesModel choicesModel = ChoicesModel.fromJson(response);
+      return (choicesModel.choices != null && choicesModel.choices.isNotEmpty)
+          ? Result.value(choicesModel)
+          : Result.error(choicesModel);
+    }
+  }
+
+  Future<Result> getValueslabs() async {
+    Result res = await BaseClient.get('value-slabs');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ValueSlabModel valueSlabsModel = ValueSlabModel.fromJson(response);
+      return (valueSlabsModel.valueSlabs != null &&
+              valueSlabsModel.valueSlabs.isNotEmpty)
+          ? Result.value(valueSlabsModel)
+          : Result.error(valueSlabsModel);
+    }
+  }
+
+  Future<Result> personalDetails(
+    int maritalstatusid,
+    int childcount,
+    int height,
+    int weight,
+    int skintypeid,
+    int bodytypeid,
+    int bloodgroupid,
+    int disabilitystatus,
+    String disabilitydesc,
+    int majorsurgery,
+    int dietid,
+    int drinkinghabitid,
+    int smokinghabitid,
+    int havepet,
+  ) async {
+    try {
+      Result res = await BaseClient.post(
+        'personal-info',
+        body: {
+          "marital_status_id": maritalstatusid,
+          "child_count": childcount,
+          "height": height,
+          "weight": weight,
+          "skin_type_id": skintypeid,
+          "body_type_id": bodytypeid,
+          "blood_group_id": bloodgroupid,
+          "disability_status": disabilitystatus,
+          "disability_desc": disabilitydesc,
+          "major_surgery": majorsurgery,
+          "diet_id": dietid,
+          "drinking_habit_id": drinkinghabitid,
+          "smoking_habit_id": smokinghabitid,
+          "have_pet": havepet,
+        },
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('Personal info response $response');
+        PersonalModel personalModel = PersonalModel.fromJson(response);
+        return Result.value(personalModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('Personal info validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> getFamilyStatus() async {
+    Result res = await BaseClient.get('family-statuses');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      FamilyStatusesModel familyStatusesModel = FamilyStatusesModel.fromJson(
+        response,
+      );
+      return (familyStatusesModel.familyStatuses != null &&
+              familyStatusesModel.familyStatuses.isNotEmpty)
+          ? Result.value(familyStatusesModel)
+          : Result.error(familyStatusesModel);
+    }
+  }
+
+  Future<Result> getFamilyType() async {
+    Result res = await BaseClient.get('family-types');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      FamilyTypeModel familyTypesModel = FamilyTypeModel.fromJson(response);
+      return (familyTypesModel.familyTypes != null &&
+              familyTypesModel.familyTypes.isNotEmpty)
+          ? Result.value(familyTypesModel)
+          : Result.error(familyTypesModel);
+    }
+  }
+
+  Future<Result> getFamilyValue() async {
+    Result res = await BaseClient.get('family-values');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      FamilyValuesModel familyValuesModel = FamilyValuesModel.fromJson(
+        response,
+      );
+      return (familyValuesModel.familyValues != null &&
+              familyValuesModel.familyValues.isNotEmpty)
+          ? Result.value(familyValuesModel)
+          : Result.error(familyValuesModel);
+    }
+  }
+
+  Future<Result> familyInfo(
+    int familytypeid,
+    int familystatusid,
+    int familyvalueid,
+    int memberscount,
+    int brothercount,
+    int sistercount,
+    int brothermarriedcount,
+    int sistermarriedcount,
+    int fatherjobid,
+    int motherjobid,
+    int familypropertyvalueid,
+    String mobile2,
+    int mobile2whatsapp, // 1 = WhatsApp enabled, 0 = not
+  ) async {
+    try {
+      Result res = await BaseClient.post(
+        'family-info',
+        body: {
+          "family_type_id": familytypeid,
+          "family_status_id": familystatusid,
+          "family_value_id": familyvalueid,
+          "members_count": memberscount,
+          "brother_count": brothercount,
+          "sister_count": sistercount,
+          "brother_married_count": brothermarriedcount,
+          "sister_married_count": sistermarriedcount,
+          "father_job_id": fatherjobid,
+          "mother_job_id": motherjobid,
+          "family_property_value_id": familypropertyvalueid,
+          "mobile_2": mobile2,
+          "mobile_2_whatsapp": mobile2whatsapp
+        },
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('family info response $response');
+        FamilyModel familyModel = FamilyModel.fromJson(response);
+        return Result.value(familyModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('family info validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> gethobbies() async {
+    Result res = await BaseClient.get('hobbies');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      HobbiesModel hobbiesModel = HobbiesModel.fromJson(response);
+      return (hobbiesModel.hobbies != null && hobbiesModel.hobbies.isNotEmpty)
+          ? Result.value(hobbiesModel)
+          : Result.error(hobbiesModel);
+    }
+  }
+
+  Future<Result> hobbyInfo(List<int> hobbies, String otherHobbies) async {
+    try {
+      Result res = await BaseClient.post(
+        'hobby-info',
+        body: {"hobbies": hobbies, "other_hobbies": otherHobbies},
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('hobby info response $response');
+        HobbyInfoModel hobbyInfoModel = HobbyInfoModel.fromJson(response);
+        return Result.value(hobbyInfoModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('hobby info validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> getStars() async {
+    Result res = await BaseClient.get('stars');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      StarsModel starsModel = StarsModel.fromJson(response);
+      return (starsModel.stars != null && starsModel.stars.isNotEmpty)
+          ? Result.value(starsModel)
+          : Result.error(starsModel);
+    }
+  }
+
+  Future<Result> horoscopeInfo(
+    String dobhoroscope,
+    String birthtime,
+    String birthtimeperiod,
+    String birthplace,
+    int? starid,
+    int issudhajathakam,
+    int isdoshajathakam,
+    int show,
+    int matchtypeid,
+    int starmatch,
+    String doshatype,
+  ) async {
+    try {
+      Result res = await BaseClient.post(
+        'horoscope-info',
+        body: {
+          "dob_horoscope": dobhoroscope,
+          "birth_time": birthtime,
+          "birth_time_period": birthtimeperiod,
+          "birth_place": birthplace,
+          // Only send star_id when a star is chosen; 0 fails "exists" validation.
+          if (starid != null) "star_id": starid,
+          "is_sudha_jathakam": issudhajathakam,
+          "is_dosha_jathakam": isdoshajathakam,
+          "show": show,
+          "star_match": starmatch,
+          "match_type_id": matchtypeid,
+          "dosha_type": doshatype,
+        },
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('horoscope info response $response');
+        HoroscopeModel horoscopeModel = HoroscopeModel.fromJson(response);
+        return Result.value(horoscopeModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('horoscope info validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> signIn(String mobile) async {
+    try {
+      Result res = await BaseClient.post(
+        'signin',
+        body: {"mobile_number": mobile},
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('SingIn response $response');
+        SignInModel signInModel = SignInModel.fromJson(response);
+        return Result.value(signInModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('SingIn validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  // Endpoint name is a guess (no catalog endpoint was ever wired to the
+  // pre-existing but unused ImageTypesModel) — confirm against the real API
+  // if this 404s, and swap the string below.
+  Future<Result> getImageTypes() async {
+    Result res = await BaseClient.get('image-types');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      debugPrint('photos type response $response');
+      ImageTypesModel imageTypesModel = ImageTypesModel.fromJson(response);
+      return (imageTypesModel.imageTypes.isNotEmpty)
+          ? Result.value(imageTypesModel)
+          : Result.error(imageTypesModel);
+    }
+  }
+
+  Future<Result> uploadPhotos(
+    Map<String, String> fields,
+    Map<String, File> files,
+  ) async {
+    try {
+      Result res = await BaseClient.postMultipart(
+        'photos',
+        fields: fields,
+        files: files,
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('photos upload response $response');
+        PhotosModel photosModel = PhotosModel.fromJson(response);
+        return Result.value(photosModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('photos upload validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> getSubscription() async {
+    Result res = await BaseClient.get('subscriptions');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      GetSubscriptionModel getSubscription = GetSubscriptionModel.fromJson(
+        response,
+      );
+      return Result.value(getSubscription);
+    }
+  }
+
+  Future<Result> chooseSubscription(int subscriptionId) async {
+    try {
+      Result res = await BaseClient.post('subscription/choose', body: {
+        'subscription_id':subscriptionId,
+      });
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('chooseSubscription response $response');
+        ChooseSubscriptionModel chooseSubscriptionModel = ChooseSubscriptionModel.fromJson(response);
+        return Result.value(chooseSubscriptionModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('chooseSubscription validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> search(SearchBody body) async {
+    try {
+      Result res = await BaseClient.post('search', body: body.toJson());
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        SearchModel searchModel = SearchModel.fromJson(response);
+        return Result.value(searchModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('search validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<Result> getDashboard() async {
+    Result res = await BaseClient.get('home');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      DashboardModel dashboardModel = DashboardModel.fromJson(response);
+      return Result.value(dashboardModel);
+    }
+  }
+
+  Future<Result> getChat() async {
+    Result res = await BaseClient.get('chats');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ChatModel chatModel = ChatModel.fromJson(response);
+      return Result.value(chatModel);
+    }
+  }
+
+  Future<Result> getAllMatches() async {
+    Result res = await BaseClient.get('matches');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      AllMatchesModel allMatchesModel = AllMatchesModel.fromJson(response);
+      return Result.value(allMatchesModel);
+    }
+  }
+
+  Future<Result> getNewMatches() async {
+    Result res = await BaseClient.get('matches/new');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      NewMatchesModel newMatchesModel = NewMatchesModel.fromJson(response);
+      return Result.value(newMatchesModel);
+    }
+  }
+
+  Future<Result> getViewedMe() async {
+    Result res = await BaseClient.get('matches/viewed-me');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ViewedMeModel viewedMeModel = ViewedMeModel.fromJson(response);
+      return Result.value(viewedMeModel);
+    }
+  }
+
+  Future<Result> getViewedByMe() async {
+    Result res = await BaseClient.get('matches/viewed-by-me');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ViewedByMeModel viewedByMeModel = ViewedByMeModel.fromJson(response);
+      return Result.value(viewedByMeModel);
+    }
+  }
+
+
+  Future<Result> getShortlistedByYou() async {
+    Result res = await BaseClient.get('matches/shortlisted-by-you');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ShortlistedByYouModel shortlistedByYouModel = ShortlistedByYouModel.fromJson(response);
+      return Result.value(shortlistedByYouModel);
+    }
+  }
+
+  Future<Result> getShortlistedYou() async {
+    Result res = await BaseClient.get('matches/shortlisted-you');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ShortlistedYouModel shortlistedYouModel = ShortlistedYouModel.fromJson(response);
+      return Result.value(shortlistedYouModel);
+    }
+  }
+
+
+  Future<Result> interestReceivedAll() async {
+    Result res = await BaseClient.get('inbox/received');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      InterestReceivedAllModel interestReceivedAcceptedModel = InterestReceivedAllModel.fromJson(response);
+      return Result.value(interestReceivedAcceptedModel);
+    }
+  }
+
+
+
+  Future<Result> interestReceived(int status) async {
+    Result res = await BaseClient.get('inbox/received?status=$status');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      InterestReceivedModel interestReceivedModel = InterestReceivedModel.fromJson(response);
+      return Result.value(interestReceivedModel);
+    }
+  }
+
+  Future<Result> interestSend(int status) async {
+    Result res = await BaseClient.get('inbox/sent?status=$status');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      InterestSentModel interestSentModel = InterestSentModel.fromJson(response);
+      return Result.value(interestSentModel);
+    }
+  }
+
+
+  Future<Result> respondInterest(int interestid,String status) async {
+    Result res = await BaseClient.post('inbox/interests/$interestid/respond',
+      body: {
+        "status" : status
+      }
+    );
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      RespondInterestModel interestInterestModel = RespondInterestModel.fromJson(response);
+      return Result.value(interestInterestModel);
+    }
+  }
+
+
+  Future<Result> request(String type) async{
+    Result res = await BaseClient.get('inbox/requests/received?type=$type');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      RequestModel requestModel = RequestModel.fromJson(response);
+      return Result.value(requestModel);
+    }
+  }
+
+
+
+  Future<Result> requestRespond(int requestid,String status) async{
+    Result res = await BaseClient.post('inbox/requests/$requestid/respond',
+      body: {
+        "status" : status
+      }
+    );
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      RespondRequestModel respondRequestModel = RespondRequestModel.fromJson(response);
+      return Result.value(respondRequestModel);
+    }
+  }
+
+  Future<Result> shorlist(int id) async {
+    Result res = await BaseClient.post(
+      'matches/$id/shortlist'
+    );
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ShortListModel shortListModel = ShortListModel.fromJson(response);
+      return Result.value(shortListModel);
+    }
+  }
+
+
+  Future<Result> requestSend(String type) async {
+    Result res = await BaseClient.get('inbox/requests/sent?type=$type');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      RequestSendModel requestSendModel = RequestSendModel.fromJson(response);
+      return Result.value(requestSendModel);
+    }
+  }
+
+
+
+  Future<Result> contactsViewedByMe() async {
+    Result res = await BaseClient.get('inbox/contacts');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ContactsViewedByMeModel contactsViewedByMeModel = ContactsViewedByMeModel.fromJson(response);
+      return Result.value(contactsViewedByMeModel);
+    }
+  }
+
+
+  Future<Result> contactsViewedByYou() async {
+    Result res = await BaseClient.get('inbox/contacts/viewed-you');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ContactsViewedYouModel contactsViewedYouModel = ContactsViewedYouModel.fromJson(response);
+      return Result.value(contactsViewedYouModel);
+    }
+  }
+
+}
