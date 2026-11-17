@@ -148,8 +148,6 @@
 //   }
 // }
 
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -196,8 +194,9 @@ class _FamilyDetailsScreenState extends State<FamilyDetailsScreen> {
     super.dispose();
   }
 
-  List<Opt> _opts(Iterable<dynamic>? items) =>
-      (items ?? const []).map<Opt>((e) => Opt(e.id as int, e.name as String)).toList();
+  List<Opt> _opts(Iterable<dynamic>? items) => (items ?? const [])
+      .map<Opt>((e) => Opt(e.id as int, e.name as String))
+      .toList();
 
   Future<void> _init() async {
     setState(() => _busy = true);
@@ -240,15 +239,6 @@ class _FamilyDetailsScreenState extends State<FamilyDetailsScreen> {
     );
   }
 
-  /// Sibling counts can only be set once the family members count is chosen.
-  void _updateSiblings(VoidCallback update) {
-    if (d.familyMembers == null) {
-      showMsg('Please select the number of family members first');
-      return;
-    }
-    setState(update);
-  }
-
   Future<void> _onContinue() async {
     if (_busy) return;
     FocusScope.of(context).unfocus();
@@ -277,14 +267,15 @@ class _FamilyDetailsScreenState extends State<FamilyDetailsScreen> {
       motherJobId: _parentJobs.idOf(d.motherOccupation) ?? 0,
       familyPropertyValueId: _propertyValues.idOf(d.propertyValue) ?? 0,
       mobile2: d.secondContact,
-      mobile2whatsapp:
-          d.secondContact.isNotEmpty && d.secondContactWhatsapp ? 1 : 0,
+      mobile2whatsapp: 0,
     );
     if (!mounted) return;
     setState(() => _busy = false);
 
     if (!ok) {
-      return showMsg(rp.familyError ?? 'Something went wrong. Please try again');
+      return showMsg(
+        rp.familyError ?? 'Something went wrong. Please try again',
+      );
     }
     _goNext();
   }
@@ -301,108 +292,111 @@ class _FamilyDetailsScreenState extends State<FamilyDetailsScreen> {
         onPrimary: _onContinue,
         secondaryLabel: 'Skip',
         onSecondary: _goNext,
-        note: 'In next two stages you can enter your hobbies, interests & horoscope details.',
+        note:
+            'In next two stages you can enter your hobbies, interests & horoscope details.',
         children: [
-          FormCard(title: 'Family background', children: [
-            TwoColumn(
-              left: DropdownField(
-                label: 'Family status',
-                value: _statuses.valid(d.familyStatus),
-                items: _statuses.names,
-                onChanged: (v) => setState(() => d.familyStatus = v),
+          FormCard(
+            title: 'Family background',
+            children: [
+              TwoColumn(
+                left: DropdownField(
+                  label: 'Family status',
+                  value: _statuses.valid(d.familyStatus),
+                  items: _statuses.names,
+                  onChanged: (v) => setState(() => d.familyStatus = v),
+                ),
+                right: DropdownField(
+                  label: 'Family type',
+                  value: _types.valid(d.familyType),
+                  items: _types.names,
+                  onChanged: (v) => setState(() => d.familyType = v),
+                ),
               ),
-              right: DropdownField(
-                label: 'Family type',
-                value: _types.valid(d.familyType),
-                items: _types.names,
-                onChanged: (v) => setState(() => d.familyType = v),
+              TwoColumn(
+                left: DropdownField(
+                  label: 'Family values',
+                  value: _values.valid(d.familyValues),
+                  items: _values.names,
+                  onChanged: (v) => setState(() => d.familyValues = v),
+                ),
+                right: DropdownField(
+                  label: 'Family members',
+                  value: d.familyMembers,
+                  items: SignUpOptions.familyMemberCounts,
+                  onChanged: (v) => setState(() => d.familyMembers = v),
+                ),
               ),
-            ),
-            TwoColumn(
-              left: DropdownField(
-                label: 'Family values',
-                value: _values.valid(d.familyValues),
-                items: _values.names,
-                onChanged: (v) => setState(() => d.familyValues = v),
+            ],
+          ),
+          FormCard(
+            title: 'Siblings',
+            children: [
+              CounterTile(
+                label: 'Brothers',
+                value: d.brothers,
+                onChanged: (v) => setState(() {
+                  d.brothers = v;
+                  if (d.brothersMarried > v) d.brothersMarried = v;
+                }),
               ),
-              right: DropdownField(
-                label: 'Family members',
-                value: d.familyMembers,
-                items: SignUpOptions.familyMemberCounts,
-                onChanged: (v) => setState(() => d.familyMembers = v),
+              CounterTile(
+                label: 'Brothers married',
+                value: d.brothersMarried,
+                max: d.brothers,
+                onChanged: (v) => setState(() => d.brothersMarried = v),
               ),
-            ),
-          ]),
-          FormCard(title: 'Siblings', children: [
-            CounterTile(
-              label: 'Brothers',
-              value: d.brothers,
-              onChanged: (v) => _updateSiblings(() {
-                d.brothers = v;
-                if (d.brothersMarried > v) d.brothersMarried = v;
-              }),
-            ),
-            CounterTile(
-              label: 'Brothers married',
-              value: d.brothersMarried,
-              max: d.brothers,
-              onChanged: (v) => _updateSiblings(() => d.brothersMarried = v),
-            ),
-            CounterTile(
-              label: 'Sisters',
-              value: d.sisters,
-              onChanged: (v) => _updateSiblings(() {
-                d.sisters = v;
-                if (d.sistersMarried > v) d.sistersMarried = v;
-              }),
-            ),
-            CounterTile(
-              label: 'Sisters married',
-              value: d.sistersMarried,
-              max: d.sisters,
-              onChanged: (v) => _updateSiblings(() => d.sistersMarried = v),
-            ),
-          ]),
-          FormCard(title: 'Parents & contact', children: [
-            TwoColumn(
-              left: DropdownField(
-                label: "Father's\n occupation",
-                value: _parentJobs.valid(d.fatherOccupation),
-                items: _parentJobs.names,
-                onChanged: (v) => setState(() => d.fatherOccupation = v),
+              CounterTile(
+                label: 'Sisters',
+                value: d.sisters,
+                onChanged: (v) => setState(() {
+                  d.sisters = v;
+                  if (d.sistersMarried > v) d.sistersMarried = v;
+                }),
               ),
-              right: DropdownField(
-                label: "Mother's occupation",
-                value: _parentJobs.valid(d.motherOccupation),
-                items: _parentJobs.names,
-                onChanged: (v) => setState(() => d.motherOccupation = v),
+              CounterTile(
+                label: 'Sisters married',
+                value: d.sistersMarried,
+                max: d.sisters,
+                onChanged: (v) => setState(() => d.sistersMarried = v),
               ),
-            ),
-            DropdownField(
-              label: 'Family property value',
-              value: _propertyValues.valid(d.propertyValue),
-              items: _propertyValues.names,
-              onChanged: (v) => setState(() => d.propertyValue = v),
-            ),
-            LabeledField(
-              label: 'Second contact number',
-              child: AppTextInput(
-                controller: _phoneCtrl,
-                hint: '10-digit mobile number',
-                keyboardType: TextInputType.phone,
-                maxLength: 10,
-                counter: false,
-                formatters: [FilteringTextInputFormatter.digitsOnly],
-                onChanged: (v) => setState(() => d.secondContact = v.trim()),
+            ],
+          ),
+          FormCard(
+            title: 'Parents & contact',
+            children: [
+              TwoColumn(
+                left: DropdownField(
+                  label: "Father's\n occupation",
+                  value: _parentJobs.valid(d.fatherOccupation),
+                  items: _parentJobs.names,
+                  onChanged: (v) => setState(() => d.fatherOccupation = v),
+                ),
+                right: DropdownField(
+                  label: "Mother's\n occupation",
+                  value: _parentJobs.valid(d.motherOccupation),
+                  items: _parentJobs.names,
+                  onChanged: (v) => setState(() => d.motherOccupation = v),
+                ),
               ),
-            ),
-            if (_phoneCtrl.text.trim().isNotEmpty)
-              YesNoToggle(
-                question: 'Is this a WhatsApp enabled number?',
-                value: d.secondContactWhatsapp,
-                onChanged: (v) => setState(() => d.secondContactWhatsapp = v),
+              DropdownField(
+                label: 'Family property value',
+                value: _propertyValues.valid(d.propertyValue),
+                items: _propertyValues.names,
+                onChanged: (v) => setState(() => d.propertyValue = v),
               ),
-          ]),
+              LabeledField(
+                label: 'Second contact number',
+                child: AppTextInput(
+                  controller: _phoneCtrl,
+                  hint: '10-digit mobile number',
+                  keyboardType: TextInputType.phone,
+                  maxLength: 10,
+                  counter: false,
+                  formatters: [FilteringTextInputFormatter.digitsOnly],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

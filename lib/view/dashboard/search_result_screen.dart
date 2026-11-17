@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
+import 'profile_detail_screen.dart';
 import 'search_screen.dart';
 
 /// Search results: back + title, the "New or Saved Search" dropdown, the
@@ -10,6 +11,7 @@ class SearchResultsScreen extends StatefulWidget {
     super.key,
     required this.criteria,
     this.savedName,
+    this.showBottomNav = true,
   });
 
   /// Value this screen pops with when the user picks "New Search".
@@ -19,6 +21,7 @@ class SearchResultsScreen extends StatefulWidget {
 
   /// Name of the saved search being shown, if any.
   final String? savedName;
+  final bool showBottomNav;
 
   @override
   State<SearchResultsScreen> createState() => _SearchResultsScreenState();
@@ -154,6 +157,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bgBottom,
+      bottomNavigationBar:
+          widget.showBottomNav ? const AppBottomNav(currentIndex: 2) : null,
       body: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -263,7 +268,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                         onShare: () {/* TODO */},
                         onCall: () {/* TODO */},
                         onWhatsApp: () {/* TODO */},
-                        onTap: () {/* TODO: open profile */},
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const ProfileDetailScreen())), // TODO: pass the member's data
                       ),
                       const SizedBox(height: 18),
                     ],

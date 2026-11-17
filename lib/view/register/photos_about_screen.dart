@@ -249,6 +249,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:vivahbharath_app/function.dart';
 import 'package:vivahbharath_app/provider/register_provider.dart';
+import 'package:vivahbharath_app/services/face_validator.dart';
 import 'package:vivahbharath_app/services/register_helpers.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/register/family_details_screen.dart';
@@ -314,7 +315,20 @@ class _PhotosAboutScreenState extends State<PhotosAboutScreen> {
         imageQuality: 85,
         maxWidth: 1600,
       );
-      if (picked == null) return;
+      if (picked == null || !mounted) return;
+
+      // Make sure the photo actually shows the user's face.
+      // Main photo (slot 0) must have exactly one face; others need at least one.
+      setState(() => _busy = true);
+      final result =
+          await FaceValidator.check(picked.path, requireSingle: index == 0);
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (result != FaceCheckResult.ok) {
+        showMsg(FaceValidator.message(result));
+        return;
+      }
+
       setState(() {
         d.photos[index] = FileImage(File(picked.path));
         d.uploadedPhotos.remove(index); // new picture -> needs uploading

@@ -6,7 +6,8 @@ import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/custom/app_icon.dart';
 import 'package:vivahbharath_app/view/dashboard/home_screen.dart';
 import 'package:vivahbharath_app/view/dashboard/inbox_screen.dart';
-import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
+import 'package:vivahbharath_app/view/dashboard/matche_screen.dart' show MatchesScreen;
+import 'package:vivahbharath_app/view/dashboard/profile_screen.dart';
 import 'package:vivahbharath_app/view/dashboard/search_screen.dart';
 
 /// Main screen after login: holds the bottom navigation bar and switches
@@ -52,7 +53,7 @@ class DashboardShellState extends State<DashboardShell> {
     MatchesScreen(),
     SearchScreen(),
     InboxScreen(),
-    _ComingSoon(icon: 'user', title: 'Profile'),
+    ProfileScreen(),
   ];
 
   // Each tab has its own Navigator, so pages pushed from a tab (e.g. search

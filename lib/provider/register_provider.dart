@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:vivahbharath_app/function.dart';
 import 'package:vivahbharath_app/model/basic_info_model.dart';
+import 'package:vivahbharath_app/model/basic_search_body.dart';
+import 'package:vivahbharath_app/model/basic_search_model.dart';
 import 'package:vivahbharath_app/model/blood_group.dart';
 import 'package:vivahbharath_app/model/body_type.dart';
 import 'package:vivahbharath_app/model/cast_model.dart';
@@ -21,8 +23,6 @@ import 'package:vivahbharath_app/model/gender_model.dart';
 import 'package:vivahbharath_app/view/custom/gender_avatr.dart';
 import 'package:vivahbharath_app/model/get_subscriptionmodel.dart';
 import 'package:vivahbharath_app/model/choose_subscription_model.dart';
-import 'package:vivahbharath_app/model/search_body.dart';
-import 'package:vivahbharath_app/model/search_model.dart';
 import 'package:vivahbharath_app/model/gotar_model.dart';
 import 'package:vivahbharath_app/model/hobbies_model.dart';
 import 'package:vivahbharath_app/model/hobby_info_model.dart';
@@ -1268,10 +1268,10 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
     }
   }
 
-  SearchModel? searchModel;
+  BasicSearchModel? searchModel;
   String? searchError;
 
-  Future<bool> searchProfiles(SearchBody body) async {
+  Future<bool> basicSearch(BasicSearchBody body) async {
     updateLoadState(LoaderState.loading);
     final network = await CommonFunctions.checkInternetConnection();
     if (!network) {
@@ -1279,9 +1279,9 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
       return false;
     }
     try {
-      var res = await serviceConfig.search(body);
+      var res = await serviceConfig.basicsearch(body);
       final result = res.asValue?.value ?? res.asError?.error;
-      if (result is SearchModel) {
+      if (result is BasicSearchModel) {
         searchModel = result;
         searchError = null;
       } else if (result is ErrorResponseModel) {

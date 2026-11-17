@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:async/async.dart';
 import 'package:vivahbharath_app/model/all_matches_model.dart';
 import 'package:vivahbharath_app/model/basic_info_model.dart';
+import 'package:vivahbharath_app/model/basic_search_body.dart';
+import 'package:vivahbharath_app/model/basic_search_model.dart';
 import 'package:vivahbharath_app/model/blood_group.dart';
 import 'package:vivahbharath_app/model/body_type.dart';
 import 'package:vivahbharath_app/model/cast_model.dart';
@@ -43,6 +45,8 @@ import 'package:vivahbharath_app/model/new_matches_model.dart';
 import 'package:vivahbharath_app/model/occupations_model.dart';
 import 'package:vivahbharath_app/model/personal_model.dart';
 import 'package:vivahbharath_app/model/photos_model.dart';
+import 'package:vivahbharath_app/model/privacy_settings_body.dart';
+import 'package:vivahbharath_app/model/privacy_settings_model.dart';
 import 'package:vivahbharath_app/model/professional_model.dart';
 import 'package:vivahbharath_app/model/religions_model.dart';
 import 'package:vivahbharath_app/model/request_model.dart';
@@ -50,8 +54,6 @@ import 'package:vivahbharath_app/model/request_send_model.dart';
 import 'package:vivahbharath_app/model/residiential_model.dart';
 import 'package:vivahbharath_app/model/respond_interest_model.dart';
 import 'package:vivahbharath_app/model/respond_request_model.dart';
-import 'package:vivahbharath_app/model/search_body.dart';
-import 'package:vivahbharath_app/model/search_model.dart';
 import 'package:vivahbharath_app/model/shortlist_model.dart';
 import 'package:vivahbharath_app/model/shortlisted_by_you_model.dart';
 import 'package:vivahbharath_app/model/shortlisted_you_model.dart';
@@ -1165,9 +1167,9 @@ class ServiceConfig {
     }
   }
 
-  Future<Result> search(SearchBody body) async {
+  Future<Result> basicsearch(BasicSearchBody body) async {
     try {
-      Result res = await BaseClient.post('search', body: body.toJson());
+      Result res = await BaseClient.post('search/basic', body: body.toJson());
       if (res.isError) {
         ErrorResponseModel errorResponseModel = ErrorResponseModel(
           errorMessage: 'OOps...!, Something went wrong',
@@ -1175,8 +1177,8 @@ class ServiceConfig {
         return Result.error(errorResponseModel);
       } else {
         var response = res.asValue!.value;
-        SearchModel searchModel = SearchModel.fromJson(response);
-        return Result.value(searchModel);
+        BasicSearchModel basicsearchModel = BasicSearchModel.fromJson(response);
+        return Result.value(basicsearchModel);
       }
     } on AppException catch (e) {
       debugPrint('search validation error: ${e.message}');
@@ -1465,4 +1467,60 @@ class ServiceConfig {
     }
   }
 
+
+    Future<Result> privacySettings(PrivacySettingsBody body) async {
+    try {
+      Result res = await BaseClient.post('privacy-settings', body: body.toJson());
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        PrivacySettingsModel privacySettingsModel = PrivacySettingsModel.fromJson(response);
+        return Result.value(privacySettingsModel);
+      }
+    } on AppException catch (e) {
+      debugPrint('privacy settings error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+    Future<Result> onlineMatches() async {
+    Result res = await BaseClient.get('matches/online');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ContactsViewedYouModel contactsViewedYouModel = ContactsViewedYouModel.fromJson(response);
+      return Result.value(contactsViewedYouModel);
+    }
+  }
+
+  /// Raw JSON for any `matches/*` list. The endpoints don't share one
+  /// schema, so `MatchesProvider` parses the result leniently.
+  Future<Result> getMatchList(String path,
+      {int offset = 0, int limit = 20}) async {
+    final res = await BaseClient.get(path, map: {
+      'offset': '$offset',
+      'limit': '$limit',
+    });
+    if (res is! Result || res.isError) {
+      return Result.error(ErrorResponseModel(
+        errorMessage: 'Could not load matches. Please try again',
+      ));
+    }
+    return Result.value(res.asValue!.value);
+  }
 }

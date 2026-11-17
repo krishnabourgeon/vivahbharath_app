@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vivahbharath_app/provider/register_provider.dart';
+import 'package:vivahbharath_app/services/search_options.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
 import 'package:vivahbharath_app/view/dashboard/search_result_screen.dart';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Search model
@@ -17,118 +21,171 @@ enum SearchType {
   final String label;
 }
 
-/// One dropdown on the form. Replace the sample [options] with your API data.
+/// One dropdown on the form. Fields listed in [SearchOptions.apiFields] get
+/// their options from the API; the rest use the static [fallback] list.
 class SearchField {
-  const SearchField(this.id, this.label, this.hint, this.options);
+  const SearchField(this.id, this.label, this.hint,
+      [this.fallback = const [], this.multi = true]);
   final String id;
   final String label;
   final String hint;
-  final List<String> options;
+  final List<String> fallback;
+
+  /// True: pick several (e.g. many cities). False: pick one.
+  final bool multi;
+
+  bool get fromApi => SearchOptions.apiFields.contains(id);
+
+  List<String> get options =>
+      fromApi ? SearchOptions.instance.namesOf(id) : fallback;
+
+  SearchField relabel(String label) =>
+      SearchField(id, label, hint, fallback, multi);
 }
 
-// Sample option lists — swap for values from your backend.
+// Ranges are generated locally (the API filters by number).
 final kAgeOptions = [for (var a = 18; a <= 60; a++) '$a'];
-final kHeightOptions = [
-  for (var i = 48; i <= 84; i++) "${i ~/ 12}'${i % 12}\"",
-];
-final kWeightOptions = [for (var w = 40; w <= 120; w += 5) '$w kg'];
+/// 131 – 210 cm, every cm.
+final kHeightOptions = [for (var h = 131; h <= 210; h++) '$h cm'];
 
+/// 35 – 150 kg, every kg.
+final kWeightOptions = [for (var w = 35; w <= 150; w++) '$w kg'];
+
+/// Number part of a "170 cm" / "60 kg" option, for API requests.
+int? measureValue(String? option) =>
+    option == null ? null : int.tryParse(option.split(' ').first);
+
+// Options for every field without a static list come from the API
+// (see SearchOptions.apiFields).
 const kBasicFields = <SearchField>[
-  SearchField('marital', 'Marital Status', 'Select marital status', [
-    'Never married',
-    'Divorced',
-    'Widow / Widower',
-    'Awaiting divorce',
-    'Annulled',
-  ]),
+  SearchField('marital', 'Marital Status', 'Select marital status'),
   SearchField('disability', 'Disability Status', 'Select',
-      ['None', 'Physically challenged']),
-  SearchField('motherTongue', 'Mother Tongue', 'Select mother tongue', [
-    'Malayalam',
-    'English',
-    'Hindi',
-    'Tamil',
-    'Kannada',
-    'Telugu',
-    'Arabic',
-  ]),
-  SearchField('education', 'Education', 'Select education', [
-    'Higher Secondary',
-    'Diploma',
-    'Bachelors Degree',
-    'Master Degree',
-    'Doctorate',
-  ]),
-  SearchField('religion', 'Religion', 'Select religion',
-      ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Jain', 'Buddhist']),
-  SearchField('caste', 'Caste', 'Select caste',
-      ['Nair', 'Thiyya', 'Ezhava', 'Other']),
-  SearchField('familyType', 'Family Type', 'Select family type',
-      ['Nuclear family', 'Joint family']),
+      ['Yes', 'No']),
+  SearchField('motherTongue', 'Mother Tongue', 'Select mother tongue'),
+  SearchField('education', 'Education', 'Select education'),
+  SearchField('religion', 'Religion', 'Select religion'),
+  SearchField('caste', 'Caste', 'Select caste'),
+  SearchField('familyType', 'Family Type', 'Select family type'),
 ];
 
-const kAdvancedFields = <SearchField>[
-  SearchField('occupation', 'Occupation', 'Select occupation', [
-    'Software Engineer',
-    'Software Developer',
-    'Doctor',
-    'Teacher',
-    'Government / PSU',
-    'Business',
-  ]),
-  SearchField('income', 'Annual Income', 'Select income range', [
-    'Below ₹3 Lakh',
-    '₹3 – 5 Lakh',
-    '₹5 – 10 Lakh',
-    '₹10 – 20 Lakh',
-    'Above ₹20 Lakh',
-  ]),
-  SearchField('location', 'Country / State / City', 'Select location', [
-    'India · Kerala · Kozhikode',
-    'India · Kerala · Malappuram',
-    'India · Kerala · Thrissur',
-    'India · Kerala · Kochi',
-    'India · Kerala · Kannur',
-  ]),
-  SearchField('diet', 'Diet', 'Select diet',
-      ['Vegetarian', 'Non-vegetarian', 'Eggetarian']),
+SearchField _basic(String id) => kBasicFields.firstWhere((f) => f.id == id);
+
+// ── Advanced search (matches the web "Advanced Search" form) ────────────────
+const _kYesNoAny = ['Yes', 'No'];
+
+const kAdvLifestyleFields = <SearchField>[
+  SearchField('familyStatus', 'Family Status', 'Select family status'),
+  SearchField('bodyType', 'Body Type', 'Select body type'),
+  // motherTongue → from kBasicFields
+  SearchField('skinTone', 'Body Skin Tone', 'Select body skin tone'),
+  // familyType → from kBasicFields
+  SearchField('foodType', 'Food Type', 'Select food type'),
+  SearchField('drinking', 'Drinking Habits', 'Select'),
+  SearchField('smoking', 'Smoking Habits', 'Select'),
 ];
 
-const kQuickToggles = <(String, String, IconData)>[
-  ('withPhoto', 'With photo', Icons.photo_camera_outlined),
-  ('verified', 'Verified', Icons.verified_user_outlined),
-  ('online', 'Online now', Icons.wifi_rounded),
-  ('premium', 'Premium', Icons.workspace_premium_outlined),
+const kAdvGotra = SearchField('gotra', 'Gotra', 'Select gotra');
+
+const kAdvLocationFields = <SearchField>[
+  SearchField('country', 'Country', 'Select country'),
+  SearchField('state', 'State', 'Select state'),
+  SearchField('city', 'City', 'Select city'),
 ];
+
+const kAdvCareerFields = <SearchField>[
+  // education (Qualification) → from kBasicFields
+  SearchField('employment', 'Employment Type', 'Select employment type'),
+  SearchField('occupation', 'Occupation', 'Select occupation'),
+  SearchField('income', 'Annual Income', 'Select annual income'),
+  SearchField('languages', 'Languages Known', 'Select languages'),
+  SearchField('familyProperty', 'Family Property', 'Select family property'),
+];
+
+const kAdvHoroscopeFields = <SearchField>[
+  SearchField(
+      'sudha', 'Profile with Sudha Jathakam', 'Select', _kYesNoAny, false),
+  SearchField(
+      'dosha', 'Profile with Dosha Jathakam', 'Select', _kYesNoAny, false),
+];
+
+const kSortField = SearchField('sortBy', 'Sort by', 'Select',
+    ['Best match', 'Newest first', 'Recently active', 'Premium first'], false);
+
+const kCreatedWithin = ['All', 'Today', 'One week', 'One month'];
+
+/// Every dropdown on both forms (used to build the criteria tags).
+final kAllSearchFields = <SearchField>[
+  ...kBasicFields,
+  ...kAdvLifestyleFields,
+  kAdvGotra,
+  ...kAdvLocationFields,
+  ...kAdvCareerFields,
+  ...kAdvHoroscopeFields,
+  kSortField,
+];
+
+// const kQuickToggles = <(String, String, IconData)>[
+//   ('withPhoto', 'With photo', Icons.photo_camera_outlined),
+//   ('verified', 'Verified', Icons.verified_user_outlined),
+//   ('online', 'Online now', Icons.wifi_rounded),
+//   ('premium', 'Premium', Icons.workspace_premium_outlined),
+// ];
 
 /// One removable tag in the "Your search criteria" box.
 class CriteriaTag {
-  const CriteriaTag(this.label, this.value, this.keys);
+  const CriteriaTag(this.label, this.value, this.keys, {this.only});
   final String label;
   final String value;
   final List<String> keys; // value keys / toggle ids this tag clears
+
+  /// For multi-select fields: remove just this one option.
+  final String? only;
 }
 
 class SearchCriteria {
   SearchCriteria({
     Map<String, String>? values,
+    Map<String, Set<String>>? multi,
     Set<String>? toggles,
     this.type = SearchType.basic,
   })  : values = {...?values},
+        multi = {
+          for (final e in (multi ?? const <String, Set<String>>{}).entries)
+            if (e.value.isNotEmpty) e.key: {...e.value},
+        },
         toggles = {...?toggles};
 
+  /// Single values (ranges, sort, Yes/No…).
   final Map<String, String> values;
+
+  /// Multi-select values (cities, states, castes…).
+  final Map<String, Set<String>> multi;
   final Set<String> toggles;
   SearchType type;
 
-  SearchCriteria copy() =>
-      SearchCriteria(values: values, toggles: toggles, type: type);
+  SearchCriteria copy() => SearchCriteria(
+      values: values, multi: multi, toggles: toggles, type: type);
 
-  bool get isEmpty => values.isEmpty && toggles.isEmpty;
+  bool get isEmpty => values.isEmpty && multi.isEmpty && toggles.isEmpty;
+
+  void setMulti(String key, Set<String> v) {
+    if (v.isEmpty) {
+      multi.remove(key);
+    } else {
+      multi[key] = {...v};
+    }
+  }
 
   void remove(CriteriaTag tag) {
+    if (tag.only != null) {
+      final set = multi[tag.keys.first];
+      set?.remove(tag.only);
+      if (set != null && set.isEmpty) multi.remove(tag.keys.first);
+      return;
+    }
     for (final k in tag.keys) {
       values.remove(k);
+      multi.remove(k);
       toggles.remove(k);
     }
   }
@@ -145,15 +202,27 @@ class SearchCriteria {
     range('Age', 'ageFrom', 'ageTo', ' yrs');
     range('Height', 'heightFrom', 'heightTo');
     range('Weight', 'weightFrom', 'weightTo');
-    for (final f in [...kBasicFields, ...kAdvancedFields]) {
+    for (final f in kAllSearchFields) {
       final v = values[f.id];
       if (v != null) out.add(CriteriaTag(f.label, v, [f.id]));
+      // One tag per picked option, so each can be removed on its own.
+      for (final m in multi[f.id] ?? const <String>{}) {
+        out.add(CriteriaTag(f.label, m, [f.id], only: m));
+      }
+    }
+    final surgery = values['surgery'];
+    if (surgery != null) {
+      out.add(CriteriaTag('Surgery / transplant', surgery, ['surgery']));
+    }
+    final created = values['createdWithin'];
+    if (created != null && created != 'All') {
+      out.add(CriteriaTag('Joined', created, ['createdWithin']));
     }
     final kw = values['keyword'];
     if (kw != null) out.add(CriteriaTag('Keywords', kw, ['keyword']));
-    for (final t in kQuickToggles) {
-      if (toggles.contains(t.$1)) out.add(CriteriaTag(t.$2, 'Yes', [t.$1]));
-    }
+    // for (final t in kQuickToggles) {
+    //   if (toggles.contains(t.$1)) out.add(CriteriaTag(t.$2, 'Yes', [t.$1]));
+    // }
     return out;
   }
 
@@ -173,11 +242,11 @@ final savedSearchStore = ValueNotifier<List<SavedSearch>>([
   SavedSearch(
     'Filter 1',
     SearchCriteria(
-      values: {
-        'ageFrom': '24',
-        'ageTo': '30',
-        'motherTongue': 'Malayalam',
-        'religion': 'Hindu',
+      values: {'ageFrom': '24', 'ageTo': '30'},
+      multi: {
+        'motherTongue': {'Malayalam'},
+        'religion': {'Hindu'},
+        'city': {'Kozhikode', 'Kochi'},
       },
       toggles: {'withPhoto'},
     ),
@@ -252,9 +321,11 @@ class SearchScreen extends StatefulWidget {
   const SearchScreen({
     super.key,
     this.initialType = SearchType.basic,
+    this.showBottomNav = true,
   });
 
   final SearchType initialType;
+  final bool showBottomNav;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -268,11 +339,88 @@ class _SearchScreenState extends State<SearchScreen> {
 
   bool get _isForm => _type == SearchType.basic || _type == SearchType.advanced;
 
+  final _opts = SearchOptions.instance;
+  late final RegisterProvider _rp = context.read<RegisterProvider>();
+
+  @override
+  void initState() {
+    super.initState();
+    _opts.addListener(_onOptions);
+    // After the first frame: the provider notifies listeners as soon as a
+    // fetch starts, which must not happen while the tree is building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadOptions();
+    });
+  }
+
   @override
   void dispose() {
+    _opts.removeListener(_onOptions);
     _idCtrl.dispose();
     _kwCtrl.dispose();
     super.dispose();
+  }
+
+  void _onOptions() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadOptions({bool force = false}) async {
+    await _opts.loadAll(_rp, force: force);
+    if (!mounted) return;
+    // Lists the user had already picked from may have changed on reload.
+    // Top-level parents only (religion, country); _reloadChildren cascades.
+    for (final parent in SearchOptions.parents.values.toSet()) {
+      if (SearchOptions.parents.containsKey(parent)) continue;
+      if (_c.multi[parent]?.isNotEmpty ?? false) await _reloadChildren(parent);
+    }
+    final failed = SearchOptions.apiFields
+        .where((f) => !SearchOptions.parents.containsKey(f))
+        .any((f) => _opts.of(f).isEmpty);
+    if (failed && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.navy,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          content: const Text('Could not load some search options',
+              style: TextStyle(fontSize: 13)),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: AppColors.gold,
+            onPressed: () => _loadOptions(force: true),
+          ),
+        ));
+    }
+  }
+
+  /// Picks in a multi-select field. When a parent (religion / country / state)
+  /// changes, its dependent list is refetched and stale picks are dropped.
+  void _setMulti(String field, Set<String> v) {
+    setState(() => _c.setMulti(field, v));
+    if (SearchOptions.parents.containsValue(field)) _reloadChildren(field);
+  }
+
+  Future<void> _reloadChildren(String parent) async {
+    final child = SearchOptions.parents.entries
+        .firstWhere((e) => e.value == parent)
+        .key;
+    final names = await _opts.loadChildren(
+        _rp, child, _c.multi[parent] ?? const <String>{});
+    if (names == null || !mounted) return; // superseded by a newer pick
+    final picked = _c.multi[child];
+    if (picked != null) {
+      final kept = picked.where(names.contains).toSet();
+      if (kept.length != picked.length) {
+        setState(() => _c.setMulti(child, kept));
+      }
+    }
+    // Cascade (country → state → city).
+    if (SearchOptions.parents.containsValue(child)) {
+      await _reloadChildren(child);
+    }
   }
 
   void _set(String key, String? v) => setState(() {
@@ -283,11 +431,14 @@ class _SearchScreenState extends State<SearchScreen> {
         }
       });
 
-  void _reset() => setState(() {
-        _c = SearchCriteria(type: _c.type);
-        _kwCtrl.clear();
-        _idCtrl.clear();
-      });
+  void _reset() {
+    _opts.clearChildren();
+    setState(() {
+      _c = SearchCriteria(type: _c.type);
+      _kwCtrl.clear();
+      _idCtrl.clear();
+    });
+  }
 
   Future<void> _save() async {
     if (_c.isEmpty) {
@@ -388,12 +539,29 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ── Basic / Advanced ───────────────────────────────────────────────────────
-  Widget _form({required bool advanced}) {
-    Widget selects(List<SearchField> fields) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final f in fields) ...[
-              FieldLabel(f.label),
+  Widget _selects(List<SearchField> fields) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final f in fields) ...[
+            FieldLabel(f.label),
+            if (f.fromApi && f.options.isEmpty)
+              OptionsPlaceholderField(
+                loading: _opts.isLoading(f.id),
+                text: _opts.isLoading(f.id)
+                    ? 'Loading…'
+                    : SearchOptions.parents.containsKey(f.id)
+                        ? 'Select ${_fieldLabel(SearchOptions.parents[f.id]!).toLowerCase()} first'
+                        : 'No options available',
+              )
+            else if (f.multi)
+              MultiSelectField(
+                hint: f.hint,
+                title: f.label,
+                options: f.options,
+                values: _c.multi[f.id] ?? const {},
+                onChanged: (v) => _setMulti(f.id, v),
+              )
+            else
               SelectField(
                 hint: f.hint,
                 title: f.label,
@@ -401,29 +569,21 @@ class _SearchScreenState extends State<SearchScreen> {
                 value: _c.values[f.id],
                 onChanged: (v) => _set(f.id, v),
               ),
-              const SizedBox(height: 12),
-            ],
+            const SizedBox(height: 12),
           ],
-        );
+        ],
+      );
 
+  String _fieldLabel(String id) =>
+      kAllSearchFields.firstWhere((f) => f.id == id).label;
+
+  Widget _form({required bool advanced}) =>
+      advanced ? _advancedForm() : _basicForm();
+
+  Widget _basicForm() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final t in kQuickToggles)
-              _TogglePill(
-                label: t.$2,
-                icon: t.$3,
-                selected: _c.toggles.contains(t.$1),
-                onTap: () => setState(() => _c.toggles.contains(t.$1)
-                    ? _c.toggles.remove(t.$1)
-                    : _c.toggles.add(t.$1)),
-              ),
-          ],
-        ),
         const SizedBox(height: 14),
         SectionCard(
           title: 'Physical',
@@ -448,19 +608,138 @@ class _SearchScreenState extends State<SearchScreen> {
           iconName: 'background',
           tint: AppColors.purple.withValues(alpha: 0.08),
           accent: AppColors.purple,
-          child: selects(kBasicFields),
+          child: _selects(kBasicFields),
         ),
-        if (advanced) ...[
-          const SizedBox(height: 14),
-          SectionCard(
-            title: 'Career & Location',
-            icon: Icons.work_outline_rounded,
-            iconName: 'career',
-            tint: AppColors.cream,
-            accent: AppColors.brown,
-            child: selects(kAdvancedFields),
+      ],
+    );
+  }
+
+  Widget _advancedForm() {
+    const gap = SizedBox(height: 14);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      children: [
+        // Personal & lifestyle
+        SectionCard(
+          title: 'Personal & lifestyle',
+          icon: Icons.accessibility_new_rounded,
+          iconName: 'physical',
+          tint: AppColors.blueTint,
+          accent: AppColors.link,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _range('Age', 'ageFrom', 'ageTo', kAgeOptions),
+              _range('Height', 'heightFrom', 'heightTo', kHeightOptions),
+              _range('Weight', 'weightFrom', 'weightTo', kWeightOptions),
+              _selects([_basic('marital'), _basic('disability')]),
+              const FieldLabel(
+                  'Are you preferring persons who have undergone major surgery or organ transplantation?'),
+              _RadioRow(
+                options: const ['Yes', 'No'],
+                value: _c.values['surgery'],
+                onChanged: (v) => _set('surgery', v),
+              ),
+              const SizedBox(height: 12),
+              _selects([
+                kAdvLifestyleFields[0], // Family Status
+                kAdvLifestyleFields[1], // Body Type
+                _basic('motherTongue'),
+                kAdvLifestyleFields[2], // Body Skin Tone
+                _basic('familyType'),
+                kAdvLifestyleFields[3], // Food Type
+                kAdvLifestyleFields[4], // Drinking
+                kAdvLifestyleFields[5], // Smoking
+              ]),
+            ],
           ),
-        ],
+        ),
+        gap,
+        SectionCard(
+          title: 'Religious details',
+          icon: Icons.temple_hindu_outlined,
+          iconName: 'religion',
+          tint: const Color(0xFFFBF0EE),
+          accent: AppColors.coral,
+          child: _selects([_basic('religion'), _basic('caste'), kAdvGotra]),
+        ),
+        gap,
+        SectionCard(
+          title: 'Location details',
+          icon: Icons.location_on_outlined,
+          iconName: 'location',
+          tint: AppColors.purple.withValues(alpha: 0.08),
+          accent: AppColors.purple,
+          child: _selects(kAdvLocationFields),
+        ),
+        gap,
+        SectionCard(
+          title: 'Education & professional details',
+          icon: Icons.school_outlined,
+          iconName: 'education',
+          tint: AppColors.cream,
+          accent: AppColors.brown,
+          child: _selects([
+            _basic('education').relabel('Qualification'),
+            ...kAdvCareerFields,
+          ]),
+        ),
+        gap,
+        SectionCard(
+          title: 'Horoscope details',
+          icon: Icons.auto_awesome_outlined,
+          iconName: 'horoscope',
+          tint: const Color(0xFFFBF0EE),
+          accent: AppColors.coral,
+          child: _selects(kAdvHoroscopeFields),
+        ),
+        gap,
+        SectionCard(
+          title: 'Profiles type',
+          icon: Icons.people_outline_rounded,
+          iconName: 'profiles',
+          tint: AppColors.blueTint,
+          accent: AppColors.tealMid,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const FieldLabel('Profiles based on created date'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final o in kCreatedWithin)
+                    FilterPill(
+                      label: o,
+                      selected: (_c.values['createdWithin'] ?? 'All') == o,
+                      onTap: () =>
+                          _set('createdWithin', o == 'All' ? null : o),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: AppColors.blueTintBorder),
+              const SizedBox(height: 10),
+              const FieldLabel('Profiles with Photo'),
+              _CheckRow(
+                label: 'Matches who have added photos',
+                value: _c.toggles.contains('withPhoto'),
+                onChanged: (v) => setState(() => v
+                    ? _c.toggles.add('withPhoto')
+                    : _c.toggles.remove('withPhoto')),
+              ),
+            ],
+          ),
+        ),
+        gap,
+        SectionCard(
+          title: 'Sort and filter',
+          icon: Icons.sort_rounded,
+          iconName: 'sort',
+          tint: AppColors.blueTint,
+          accent: AppColors.link,
+          child: _selects([kSortField]),
+        ),
       ],
     );
   }
@@ -1190,6 +1469,453 @@ class _EmptyNote extends StatelessWidget {
         text,
         textAlign: TextAlign.center,
         style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+      ),
+    );
+  }
+}
+
+
+/// Single-choice radio options in a row (e.g. Yes / No).
+class _RadioRow extends StatelessWidget {
+  const _RadioRow({
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<String> options;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 8,
+      children: [
+        for (final o in options)
+          Semantics(
+            inMutuallyExclusiveGroup: true,
+            checked: o == value,
+            child: Material(
+              color: o == value
+                  ? AppColors.tealMid.withValues(alpha: 0.08)
+                  : Colors.white,
+              shape: StadiumBorder(
+                side: BorderSide(
+                    color:
+                        o == value ? AppColors.tealMid : AppColors.fieldBorder),
+              ),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                // Tap again to clear.
+                onTap: () => onChanged(o == value ? null : o),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      matchIcon(
+                        o == value
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        'radio',
+                        size: 18,
+                        color: o == value ? AppColors.tealMid : AppColors.hint,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(o,
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: o == value
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: AppColors.navy)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Tick box with a label.
+class _CheckRow extends StatelessWidget {
+  const _CheckRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      checked: value,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => onChanged(!value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: value ? AppColors.tealMid : Colors.white,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(
+                    color: value ? AppColors.tealMid : AppColors.fieldBorder,
+                    width: 1.6,
+                  ),
+                ),
+                child: value
+                    ? Center(
+                        child: matchIcon(Icons.check_rounded, 'check',
+                            size: 16, color: Colors.white),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(label,
+                    style:
+                        const TextStyle(fontSize: 14, color: AppColors.navy)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Multi-select dropdown: opens a list with tick boxes.
+/// Long lists (cities, castes…) get a search box and Select all / Clear.
+/// Used by Search, Edit Profile and Partner Preferences.
+class MultiSelectField extends StatelessWidget {
+  const MultiSelectField({
+    super.key,
+    required this.hint,
+    required this.title,
+    required this.options,
+    required this.values,
+    required this.onChanged,
+  });
+
+  final String hint;
+  final String title;
+  final List<String> options;
+  final Set<String> values;
+  final ValueChanged<Set<String>> onChanged;
+
+  static const _maxChips = 3;
+
+  Future<void> _pick(BuildContext context) async {
+    final picked = await showModalBottomSheet<Set<String>>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _MultiSelectSheet(
+        title: title,
+        options: options,
+        initial: values,
+      ),
+    );
+    if (picked != null) onChanged(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final has = values.isNotEmpty;
+    final shown = values.take(_maxChips).toList();
+    final extra = values.length - shown.length;
+
+    return Semantics(
+      button: true,
+      label: title,
+      value: has ? values.join(', ') : null,
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+              color: has ? AppColors.tealMid : AppColors.fieldBorder),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _pick(context),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: has
+                        ? Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final v in shown) _chip(v),
+                              if (extra > 0) _chip('+$extra more', muted: true),
+                            ],
+                          )
+                        : Text(hint,
+                            style: const TextStyle(
+                                fontSize: 14, color: AppColors.hint)),
+                  ),
+                  matchIcon(Icons.keyboard_arrow_down_rounded, 'arrow_down',
+                      size: 20, color: AppColors.textMuted),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(String v, {bool muted = false}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: muted
+              ? AppColors.bgTop
+              : AppColors.tealMid.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          v,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: muted ? AppColors.textMuted : AppColors.tealMid,
+          ),
+        ),
+      );
+}
+
+class _MultiSelectSheet extends StatefulWidget {
+  const _MultiSelectSheet({
+    required this.title,
+    required this.options,
+    required this.initial,
+  });
+
+  final String title;
+  final List<String> options;
+  final Set<String> initial;
+
+  @override
+  State<_MultiSelectSheet> createState() => _MultiSelectSheetState();
+}
+
+class _MultiSelectSheetState extends State<_MultiSelectSheet> {
+  late final Set<String> _sel = {...widget.initial};
+  String _q = '';
+
+  bool get _long => widget.options.length > 8;
+
+  List<String> get _visible => _q.isEmpty
+      ? widget.options
+      : widget.options
+          .where((o) => o.toLowerCase().contains(_q.toLowerCase()))
+          .toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final visible = _visible;
+    final allVisibleSelected =
+        visible.isNotEmpty && visible.every(_sel.contains);
+
+    return Padding(
+      // Keep the sheet above the keyboard while searching.
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: mq.size.height * 0.8),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.fieldBorder,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _sel.isEmpty ? 'Any' : '${_sel.length} selected',
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppColors.textMuted),
+                    ),
+                  ],
+                ),
+                if (_long) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    onChanged: (v) => setState(() => _q = v.trim()),
+                    style: const TextStyle(fontSize: 14, color: AppColors.navy),
+                    decoration: searchInputDecoration(
+                            'Search ${widget.title.toLowerCase()}')
+                        .copyWith(
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(left: 12, right: 6),
+                        child: matchIcon(Icons.search_rounded, 'search',
+                            size: 20, color: AppColors.textMuted),
+                      ),
+                      prefixIconConstraints:
+                          const BoxConstraints(minWidth: 0, minHeight: 0),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: visible.isEmpty
+                          ? null
+                          : () => setState(() => allVisibleSelected
+                              ? _sel.removeAll(visible)
+                              : _sel.addAll(visible)),
+                      style: TextButton.styleFrom(
+                          foregroundColor: AppColors.tealMid),
+                      child: Text(
+                        allVisibleSelected ? 'Unselect all' : 'Select all',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed:
+                          _sel.isEmpty ? null : () => setState(_sel.clear),
+                      style:
+                          TextButton.styleFrom(foregroundColor: AppColors.coral),
+                      child: const Text('Clear',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+                Flexible(
+                  child: visible.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Text('No matches',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: AppColors.textMuted)),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: visible.length,
+                          itemBuilder: (_, i) {
+                            final o = visible[i];
+                            final on = _sel.contains(o);
+                            return Semantics(
+                              checked: on,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () => setState(
+                                    () => on ? _sel.remove(o) : _sel.add(o)),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 11),
+                                  child: Row(
+                                    children: [
+                                      AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 120),
+                                        width: 22,
+                                        height: 22,
+                                        decoration: BoxDecoration(
+                                          color: on
+                                              ? AppColors.tealMid
+                                              : Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          border: Border.all(
+                                            color: on
+                                                ? AppColors.tealMid
+                                                : AppColors.fieldBorder,
+                                            width: 1.6,
+                                          ),
+                                        ),
+                                        child: on
+                                            ? Center(
+                                                child: matchIcon(
+                                                    Icons.check_rounded,
+                                                    'check',
+                                                    size: 15,
+                                                    color: Colors.white),
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          o,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: on
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: AppColors.navy,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                const SizedBox(height: 10),
+                PillButton(
+                  label: _sel.isEmpty ? 'Done' : 'Done (${_sel.length})',
+                  icon: matchIcon(Icons.check_rounded, 'check',
+                      size: 18, color: Colors.white),
+                  foreground: Colors.white,
+                  gradient: kTealGradient,
+                  onTap: () => Navigator.pop(context, _sel),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

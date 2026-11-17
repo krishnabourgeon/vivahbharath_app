@@ -215,6 +215,7 @@ class _ProfessionalDetailsScreenState
       rp.getOccupations(),
       rp.getResidentialStatuses(),
       rp.getCurrencies(),
+      rp.getValueSlabs(), // annual income options
       rp.getCountries(),
       rp.motherTongue(),
     ]);
@@ -224,6 +225,7 @@ class _ProfessionalDetailsScreenState
     _occupations = _opts(rp.occupationsModel?.occupations);
     _residentialStatuses = _opts(rp.residentialModel?.residentialStatuses);
     _currencies = _opts(rp.currenciesModel?.currencies);
+    _incomes = _opts(rp.valueSlabModel?.valueSlabs);
     _countries = _opts(rp.countriesModel?.countries);
     _languages = _opts(rp.motherTongueModel?.languages);
 
@@ -234,7 +236,6 @@ class _ProfessionalDetailsScreenState
               orElse: () => _currencies.first)
           .name;
     }
-    _incomes = await _fetchIncomes(d.currency);
     _workStates = await _fetchStates(d.workCountry);
     _workCities = await _fetchDistricts(d.workState);
     if (!mounted) return;
@@ -242,15 +243,6 @@ class _ProfessionalDetailsScreenState
     if (_educations.isEmpty || _occupations.isEmpty) {
       showMsg('Could not load the form options. Please check your connection.');
     }
-  }
-
-  Future<List<Opt>> _fetchIncomes(String? currency) async {
-    final id = _currencies.idOf(currency);
-    if (id == null) return [];
-    final rp = _rp;
-    rp.incomeModel = null;
-    await rp.getIncomes(id);
-    return _opts(rp.incomeModel?.incomes);
   }
 
   Future<List<Opt>> _fetchStates(String? country) async {
@@ -277,14 +269,9 @@ class _ProfessionalDetailsScreenState
     if (mounted) setState(() => _busy = false);
   }
 
-  Future<void> _onCurrency(String? v) async {
-    setState(() {
-      d.currency = v ?? d.currency;
-      d.income = null;
-      _incomes = [];
-    });
-    await _run(() async => _incomes = await _fetchIncomes(d.currency));
-  }
+  // Income options (value slabs) don't depend on the currency.
+  void _onCurrency(String? v) =>
+      setState(() => d.currency = v ?? d.currency);
 
   Future<void> _onWorkCountry(String? v) async {
     setState(() {

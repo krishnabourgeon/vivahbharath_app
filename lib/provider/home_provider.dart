@@ -5,10 +5,14 @@ import 'package:vivahbharath_app/model/contacts_viewed_by_me_model.dart';
 import 'package:vivahbharath_app/model/contacts_viewed_you_model.dart';
 import 'package:vivahbharath_app/model/dashboard_model.dart';
 import 'package:vivahbharath_app/model/all_matches_model.dart';
+import 'package:vivahbharath_app/model/error_response_model.dart';
 import 'package:vivahbharath_app/model/interest_received_all.dart';
 import 'package:vivahbharath_app/model/interest_recevied_model.dart';
 import 'package:vivahbharath_app/model/interest_send_model.dart';
 import 'package:vivahbharath_app/model/new_matches_model.dart';
+import 'package:vivahbharath_app/model/online_matches_model.dart';
+import 'package:vivahbharath_app/model/privacy_settings_body.dart';
+import 'package:vivahbharath_app/model/privacy_settings_model.dart';
 import 'package:vivahbharath_app/model/request_model.dart';
 import 'package:vivahbharath_app/model/request_send_model.dart';
 import 'package:vivahbharath_app/model/respond_interest_model.dart';
@@ -39,6 +43,7 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
   RequestSendModel? requestSendModel;
   ContactsViewedByMeModel? contactsViewedByMeModel;
   ContactsViewedYouModel? contactsViewedYouModel;
+  OnlineMatchesModel? onlineMatchesModel;
 
   @override
   void updateLoadState(LoaderState state) {
@@ -351,9 +356,6 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
           updateLoadState(LoaderState.loaded);
 
           notifyListeners();
-          // The toggle only flips the flag server-side — refresh the
-          // "shortlisted by you" list so screens reading it (Inbox
-          // Shortlistings, Matches) pick up the add/remove immediately.
           await getShortlistedByYou();
         } else {
           updateLoadState(LoaderState.loaded);
@@ -427,6 +429,67 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
         debugPrint('exception in contacts viewed by you: $e');
         updateLoadState(LoaderState.loaded);
       }
+    }
+  }
+
+Future<void> onlineMatches() async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if (network) {
+      try {
+        var res = await serviceConfig.onlineMatches();
+        if (res.isValue) {
+          onlineMatchesModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+
+          notifyListeners();
+        } else {
+          updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in online matches: $e');
+        updateLoadState(LoaderState.loaded);
+      }
+    }
+  }
+
+  
+
+  PrivacySettingsModel? privacySettingsModel;
+  String? privacySettingsError;
+
+  /// Saves the member's privacy flags (POST privacy-settings). On success
+  /// [privacySettingsModel] holds the server's saved state; on failure
+  /// [privacySettingsError] holds a message to show.
+  ///
+  /// TODO: there is no known endpoint to READ the current settings (GET
+  /// privacy-settings returns 405). Add a fetch here once the backend
+  /// exposes one; until then the screen seeds from [privacySettingsModel].
+  Future<bool> privacySettings(PrivacySettingsBody body) async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if (!network) {
+      privacySettingsError = 'No internet connection';
+      updateLoadState(LoaderState.loaded);
+      return false;
+    }
+    try {
+      var res = await serviceConfig.privacySettings(body);
+      final result = res.asValue?.value ?? res.asError?.error;
+      if (result is PrivacySettingsModel) {
+        privacySettingsModel = result;
+        privacySettingsError = null;
+      } else if (result is ErrorResponseModel) {
+        privacySettingsError = result.errorMessage ?? 'Something went wrong';
+      }
+      updateLoadState(LoaderState.loaded);
+      notifyListeners();
+      return res.isValue;
+    } catch (e) {
+      debugPrint('exception in privacySettings: $e');
+      privacySettingsError = 'Something went wrong. Please try again';
+      updateLoadState(LoaderState.loaded);
+      return false;
     }
   }
 }
