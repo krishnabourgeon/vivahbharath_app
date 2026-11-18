@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:vivahbharath_app/model/dashboard_model.dart';
+import 'package:vivahbharath_app/services/service_config.dart';
 import 'package:vivahbharath_app/services/shared_preference_helper.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
+import 'package:vivahbharath_app/view/dashboard/dashboard_shell.dart';
+import 'package:vivahbharath_app/view/register/basic_info_screen.dart';
 import 'package:vivahbharath_app/view/register/profile_under_review_screen.dart';
+import 'package:vivahbharath_app/view/drawer/subscription_screen.dart';
 
 /// Short toast used for validation messages and API errors.
 void showMsg(String msg) {
@@ -87,6 +92,8 @@ class BusyOverlay extends StatelessWidget {
 }
 
 /// Called when the user finishes (or leaves early with "Submit now").
+/// New members pick a package next; after that the "profile under review"
+/// screen is shown.
 Future<void> finishRegistration(BuildContext context) async {
   await SharedPreferenceHelper.saveRegistrationComplete();
   if (!context.mounted) return;
@@ -94,7 +101,71 @@ Future<void> finishRegistration(BuildContext context) async {
   // Clear the sign-up steps so Back can't return into the form.
   Navigator.pushAndRemoveUntil(
     context,
-    MaterialPageRoute(builder: (_) => const ProfileUnderReviewScreen()),
+    MaterialPageRoute(
+      builder: (_) =>
+          const SubscriptionScreen(flow: SubscriptionFlow.afterSignUp),
+    ),
+    (r) => false,
+  );
+}
+
+/// Has the signed-in member already picked a package?
+///
+/// Order: the sign-in response (when it says), then the flag saved on this
+/// device, then the dashboard API's `subscription.plan_name`. If the
+/// dashboard can't be reached we don't block the member — they go on to
+/// the dashboard and can pick a plan from the drawer later.
+Future<bool> resolveSubscriptionChosen({bool? fromApi}) async {
+  if (fromApi != null) {
+    await SharedPreferenceHelper.saveSubscriptionChosen(fromApi);
+    return fromApi;
+  }
+  if (await SharedPreferenceHelper.isSubscriptionChosen()) return true;
+  try {
+    final res = await ServiceConfig().getDashboard();
+    if (!res.isValue) return true;
+    final sub = (res.asValue!.value as DashboardModel).subscription;
+    final plan = sub?.planName?.toString().trim() ?? '';
+    final chosen = (sub?.isPremium ?? false) || plan.isNotEmpty;
+    await SharedPreferenceHelper.saveSubscriptionChosen(chosen);
+    return chosen;
+  } catch (e) {
+    debugPrint('resolveSubscriptionChosen: $e');
+    return true;
+  }
+}
+
+/// Where to go after a successful sign in (OTP or password):
+/// unfinished profiles resume registration, profiles still waiting for
+/// admin approval see the "profile under review" screen, members without a
+/// package go to the subscription screen, everyone else lands on the
+/// dashboard.
+Future<void> routeAfterSignIn(
+  BuildContext context, {
+  required bool registrationCompleted,
+  bool? isApproved,
+  bool? subscriptionChosen,
+}) async {
+  Widget next;
+  if (isApproved != null) {
+    await SharedPreferenceHelper.saveApproved(isApproved);
+  }
+  if (!registrationCompleted) {
+    next = BasicInfoScreen();
+  } else if (isApproved == false) {
+    await SharedPreferenceHelper.saveRegistrationComplete();
+    next = const ProfileUnderReviewScreen();
+  } else {
+    await SharedPreferenceHelper.saveRegistrationComplete();
+    final chosen = await resolveSubscriptionChosen(fromApi: subscriptionChosen);
+    next = chosen
+        ? const DashboardShell()
+        : const SubscriptionScreen(flow: SubscriptionFlow.afterLogin);
+  }
+  if (!context.mounted) return;
+  Navigator.pushAndRemoveUntil(
+    context,
+    MaterialPageRoute(builder: (_) => next),
     (r) => false,
   );
 }

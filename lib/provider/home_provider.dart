@@ -5,14 +5,20 @@ import 'package:vivahbharath_app/model/contacts_viewed_by_me_model.dart';
 import 'package:vivahbharath_app/model/contacts_viewed_you_model.dart';
 import 'package:vivahbharath_app/model/dashboard_model.dart';
 import 'package:vivahbharath_app/model/all_matches_model.dart';
+import 'package:vivahbharath_app/model/dont_show_matches_model.dart';
+import 'package:vivahbharath_app/model/education_matches_model.dart';
 import 'package:vivahbharath_app/model/error_response_model.dart';
+import 'package:vivahbharath_app/model/family_matches_model.dart';
 import 'package:vivahbharath_app/model/interest_received_all.dart';
 import 'package:vivahbharath_app/model/interest_recevied_model.dart';
 import 'package:vivahbharath_app/model/interest_send_model.dart';
+import 'package:vivahbharath_app/model/match_profile.dart';
 import 'package:vivahbharath_app/model/new_matches_model.dart';
 import 'package:vivahbharath_app/model/online_matches_model.dart';
 import 'package:vivahbharath_app/model/privacy_settings_body.dart';
 import 'package:vivahbharath_app/model/privacy_settings_model.dart';
+import 'package:vivahbharath_app/model/profession_matches_model.dart';
+import 'package:vivahbharath_app/model/religion_match_model.dart';
 import 'package:vivahbharath_app/model/request_model.dart';
 import 'package:vivahbharath_app/model/request_send_model.dart';
 import 'package:vivahbharath_app/model/respond_interest_model.dart';
@@ -44,6 +50,11 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
   ContactsViewedByMeModel? contactsViewedByMeModel;
   ContactsViewedYouModel? contactsViewedYouModel;
   OnlineMatchesModel? onlineMatchesModel;
+  ProfessionMatchesModel? professionMatchesModel;
+  EducationMatchesModel? educationMatchesModel;
+  FamilyMatchesModel? familyMatchesModel;
+  ReligionMatchesModel? religionMatchesModel;
+  DontShowMatchesModel? dontshowMatchesModel;
 
   @override
   void updateLoadState(LoaderState state) {
@@ -51,25 +62,109 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> getDashboard() async {
-    updateLoadState(LoaderState.loading);
-    final network = await CommonFunctions.checkInternetConnection();
-    if (network) {
-      try {
-        var res = await serviceConfig.getDashboard();
-        if (res.isValue) {
-          dashboardModel = res.asValue!.value;
-          updateLoadState(LoaderState.loaded);
+  // ── Home dashboard (GET home) ─────────────────────────────────────────────
+  // The home screen uses its own flags instead of [loaderState], which every
+  // other call in this provider also flips.
 
-          notifyListeners();
-        } else {
-          updateLoadState(LoaderState.loaded);
-        }
-      } catch (e) {
-        debugPrint('exception in dashboard: $e');
-        updateLoadState(LoaderState.loaded);
+  bool dashboardLoading = false;
+
+  /// Message to show when the last dashboard fetch failed (null = no error).
+  String? dashboardError;
+
+  Future<void>? _dashboardInFlight;
+
+  /// Loads the home dashboard. Concurrent calls share one request; the
+  /// previous data stays on screen while a refresh is running.
+  Future<void> getDashboard() => _dashboardInFlight ??= _fetchDashboard().whenComplete(() => _dashboardInFlight = null);
+
+  Future<void> _fetchDashboard() async {
+    dashboardLoading = true;
+    dashboardError = null;
+    notifyListeners();
+    try {
+      final network = await CommonFunctions.checkInternetConnection();
+      if (!network) {
+        dashboardError = 'No internet connection';
+        return;
       }
+      final res = await serviceConfig.getDashboard();
+      final value = res.asValue?.value;
+      if (value is DashboardModel) {
+        dashboardModel = value;
+      } else {
+        final err = res.asError?.error;
+        dashboardError = err is ErrorResponseModel ? (err.errorMessage ?? 'Something went wrong') : 'Something went wrong';
+      }
+    } catch (e) {
+      debugPrint('exception in dashboard: $e');
+      dashboardError = 'Something went wrong. Please try again';
+    } finally {
+      dashboardLoading = false;
+      notifyListeners();
     }
+  }
+
+  final Set<String> _homeShortlistBusy = {};
+
+  /// Toggles shortlist for a member card on the home screen.
+  /// Returns the new state, or null if the request failed (state reverted).
+  Future<bool?> toggleHomeShortlist(MatchProfile p) async {
+    final id = p.apiId;
+    if (id == null) return null;
+    if (!_homeShortlistBusy.add(p.key)) return p.shortlisted;
+    final before = p.shortlisted;
+    _setHomeShortlisted(p, !before);
+    try {
+      final res = await serviceConfig.shorlist(id);
+      final value = res.asValue?.value;
+      if (value is ShortListModel) {
+        final now = value.shortlisted ?? !before;
+        _setHomeShortlisted(p, now);
+        final counts = dashboardModel?.activityCounts;
+        if (counts != null && now != before) {
+          counts.shortlistedByMe = (counts.shortlistedByMe + (now ? 1 : -1)).clamp(0, 1 << 30);
+          notifyListeners();
+        }
+        return now;
+      }
+    } catch (e) {
+      debugPrint('exception in home shortlist: $e');
+    } finally {
+      _homeShortlistBusy.remove(p.key);
+    }
+    _setHomeShortlisted(p, before);
+    return null;
+  }
+
+  /// The same member can appear in several home sections; keep them in sync.
+  void _setHomeShortlisted(MatchProfile p, bool value) {
+    for (final q in _allHomeProfiles()) {
+      if (q.key == p.key) q.shortlisted = value;
+    }
+    p.shortlisted = value;
+    notifyListeners();
+  }
+
+  /// Marks an interest as sent on every home card for this member.
+  // TODO: call the send-interest endpoint once it exists in ServiceConfig
+  // (the Matches tab only updates local state today as well).
+  void markHomeInterestSent(MatchProfile p) {
+    for (final q in _allHomeProfiles()) {
+      if (q.key == p.key) q.status = InterestStatus.awaiting;
+    }
+    p.status = InterestStatus.awaiting;
+    notifyListeners();
+  }
+
+  Iterable<MatchProfile> _allHomeProfiles() sync* {
+    final d = dashboardModel;
+    if (d == null) return;
+    yield* d.recommendations.profiles;
+    yield* d.premiumMatches;
+    yield* d.fromYourSearch;
+    yield* d.dailyMatches;
+    yield* d.newMatches;
+    yield* d.recentVisited;
   }
 
   Future<void> getAllMatches() async {
@@ -449,6 +544,120 @@ Future<void> onlineMatches() async {
       } catch (e) {
         debugPrint('exception in online matches: $e');
         updateLoadState(LoaderState.loaded);
+      }
+    }
+  }
+
+
+  Future<void> professionMatches() async { 
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if (network) {
+      try {
+        var res = await serviceConfig.professionMatches();
+        if (res.isValue) {
+          professionMatchesModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+
+          notifyListeners();
+        } else {
+          updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in profession matches: $e');
+        updateLoadState(LoaderState.loaded);
+      }
+    }
+    
+  }
+
+
+  Future<void> educationMatches() async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.educationMatches();
+        if (res.isValue) {
+          educationMatchesModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+
+          notifyListeners();
+        } else {
+          updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in education matches: $e');
+        updateLoadState(LoaderState.loaded);
+      }
+    }
+  }
+
+  Future<void> familyMatches() async{
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.familyMatches();
+        if(res.isValue){
+          familyMatchesModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+
+          notifyListeners();
+        } else {
+          updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in family matches: $e');
+        updateLoadState(LoaderState.loaded);
+        
+      }
+    }
+  }
+
+
+
+    Future<void> religionMatches() async{
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.religionMatches();
+        if(res.isValue){
+          religionMatchesModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+
+          notifyListeners();
+        } else {
+          updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in religion matches: $e');
+        updateLoadState(LoaderState.loaded);
+        
+      }
+    }
+  }
+
+
+  Future<void> dontShowMatches() async{
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.dontshowMatches();
+        if(res.isValue){
+          dontshowMatchesModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+
+          notifyListeners();
+        } else {
+          updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in religion matches: $e');
+        updateLoadState(LoaderState.loaded);
+        
       }
     }
   }

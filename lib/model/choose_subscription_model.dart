@@ -9,12 +9,12 @@ ChooseSubscriptionModel chooseSubscriptionModelFromJson(String str) => ChooseSub
 String chooseSubscriptionModelToJson(ChooseSubscriptionModel data) => json.encode(data.toJson());
 
 class ChooseSubscriptionModel {
-    bool? status;
-    String? message;
+    bool status;
+    String message;
 
     ChooseSubscriptionModel({
-        this.status,
-        this.message,
+        required this.status,
+        required this.message,
     });
 
     factory ChooseSubscriptionModel.fromJson(Map<String, dynamic> json) => ChooseSubscriptionModel(

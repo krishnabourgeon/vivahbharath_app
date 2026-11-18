@@ -7,7 +7,7 @@ import 'package:vivahbharath_app/services/register_helpers.dart';
 import 'package:vivahbharath_app/services/validation_helper.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/custom/responsive.dart';
-import 'package:vivahbharath_app/view/register/verify_otp_screen.dart';
+import 'package:vivahbharath_app/view/register/sign_upverify_otp_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -73,7 +73,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final nameErr = ValidationHelperClass.validateName(name);
     if (nameErr != null) return showMsg(nameErr);
-    if (createdForId == null) return showMsg('Please select who the profile is for');
+    if (createdForId == null)
+      return showMsg('Please select who the profile is for');
     if (tongueId == null) return showMsg('Please select the mother tongue');
     if (!RegExp(r'^\d{10}$').hasMatch(phone)) {
       return showMsg('Please provide a valid 10-digit mobile number');
@@ -95,7 +96,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (context) => VerifyCodeScreen(mobile: phone, maskedPhone: masked),
+        builder: (context) =>
+            SignUpVerifyCodeScreen(mobile: phone, maskedPhone: masked),
       ),
       (route) => false,
     );
@@ -110,107 +112,108 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return BusyOverlay(
       busy: _busy,
       child: Scaffold(
-      backgroundColor: AppColors.cream,
-      body: CustomScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        slivers: [
-          const SliverToBoxAdapter(child: _Hero()),
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(24 + side, 28, 24 + side, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Register',
-                      style: GoogleFonts.fraunces(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.headline,
-                        height: 1.1,
+        backgroundColor: AppColors.cream,
+        body: CustomScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          slivers: [
+            const SliverToBoxAdapter(child: _Hero()),
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(24 + side, 28, 24 + side, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Register',
+                        style: GoogleFonts.fraunces(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.headline,
+                          height: 1.1,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      "Let's get started. Tell us a little about the "
-                      "profile you're creating.",
-                      style: GoogleFonts.dmSans(
-                        fontSize: 16,
-                        height: 1.5,
-                        color: AppColors.body,
+                      const SizedBox(height: 10),
+                      Text(
+                        "Let's get started. Tell us a little about the "
+                        "profile you're creating.",
+                        style: GoogleFonts.dmSans(
+                          fontSize: 16,
+                          height: 1.5,
+                          color: AppColors.body,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 28),
-                    const _Label("Bride's/Groom's Name"),
-                    _Field(
-                      controller: _nameCtrl,
-                      hint: 'Full name',
-                      textCapitalization: TextCapitalization.words,
-                    ),
-                    const SizedBox(height: 20),
-                    const _Label('Create Profile For'),
-                    _Dropdown(
-                      value: _profileOptions.valid(_profileFor),
-                      items: _profileOptions.names,
-                      hint: 'Select an option',
-                      onChanged: (v) => setState(() => _profileFor = v),
-                    ),
-                    const SizedBox(height: 20),
-                    const _Label('Mother Tongue'),
-                    _Dropdown(
-                      value: _languages.valid(_motherTongue),
-                      items: _languages.names,
-                      hint: 'Select an option',
-                      onChanged: (v) => setState(() => _motherTongue = v),
-                    ),
-                    const SizedBox(height: 20),
-                    const _Label('Phone Number'),
-                    _PhoneField(controller: _phoneCtrl),
-                    const Spacer(),
-                    const SizedBox(height: 24),
-                    _PrimaryButton(label: 'Proceed', onTap: _onProceed),
-                    const SizedBox(height: 14),
-                    // full width, so WrapAlignment.center can centre it
-                    SizedBox(
-                      width: double.infinity,
-                      child: Wrap(
-                        alignment: WrapAlignment.center,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            'Already a member? ',
-                            style: GoogleFonts.dmSans(
-                              fontSize: 15,
-                              color: AppColors.body,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () => Navigator.maybePop(context),
-                            child: Text(
-                              'Login',
+                      const SizedBox(height: 28),
+                      const _Label("Bride's/Groom's Name"),
+                      _Field(
+                        controller: _nameCtrl,
+                        hint: 'Full name',
+                        textCapitalization: TextCapitalization.words,
+                      ),
+                      const SizedBox(height: 20),
+                      const _Label('Create Profile For'),
+                      _Dropdown(
+                        value: _profileOptions.valid(_profileFor),
+                        items: _profileOptions.names,
+                        hint: 'Select an option',
+                        onChanged: (v) => setState(() => _profileFor = v),
+                      ),
+                      const SizedBox(height: 20),
+                      const _Label('Mother Tongue'),
+                      _Dropdown(
+                        value: _languages.valid(_motherTongue),
+                        items: _languages.names,
+                        hint: 'Select an option',
+                        onChanged: (v) => setState(() => _motherTongue = v),
+                      ),
+                      const SizedBox(height: 20),
+                      const _Label('Phone Number'),
+                      _PhoneField(controller: _phoneCtrl),
+                      const Spacer(),
+                      const SizedBox(height: 24),
+                      _PrimaryButton(label: 'Proceed', onTap: _onProceed),
+                      const SizedBox(height: 14),
+                      // full width, so WrapAlignment.center can centre it
+                      SizedBox(
+                        width: double.infinity,
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Already a member? ',
                               style: GoogleFonts.dmSans(
                                 fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.link,
-                                decoration: TextDecoration.underline,
-                                decorationColor: AppColors.link,
+                                color: AppColors.body,
                               ),
                             ),
-                          ),
-                        ],
+                            GestureDetector(
+                              onTap: () => Navigator.maybePop(context),
+                              child: Text(
+                                'Login',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.link,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: AppColors.link,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 }
 
@@ -474,7 +477,7 @@ class _Dropdown extends StatelessWidget {
     required this.value,
     required this.items,
     required this.onChanged,
-    this.hint
+    this.hint,
   });
 
   @override

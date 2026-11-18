@@ -24,7 +24,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:vivahbharath_app/services/multi_provider_list.dart';
 import 'package:vivahbharath_app/view/custom/responsive.dart';
-import 'package:vivahbharath_app/view/onboarding_screen.dart';
+import 'package:vivahbharath_app/view/splash_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -48,7 +48,8 @@ class MyApp extends StatelessWidget {
         splitScreenMode: true,
         builder: (context, _) => MaterialApp(
           builder: responsiveBuilder,
-          home: WelcomeScreen(),
+          debugShowCheckedModeBanner: false,
+          home: const SplashScreen(),
         ),
       ),
     );

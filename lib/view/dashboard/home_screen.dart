@@ -1,14 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:vivahbharath_app/function.dart';
+import 'package:vivahbharath_app/model/dashboard_model.dart';
+import 'package:vivahbharath_app/model/match_profile.dart';
+import 'package:vivahbharath_app/provider/home_provider.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/custom/app_icon.dart';
 import 'package:vivahbharath_app/view/custom/responsive.dart';
+import 'package:vivahbharath_app/view/dashboard/dashboard_shell.dart';
 import 'package:vivahbharath_app/view/dashboard/home_drawer.dart';
+import 'package:vivahbharath_app/view/dashboard/matche_screen.dart' show MatchesScreen;
+import 'package:vivahbharath_app/view/drawer/common_activity.dart' show ActStatus;
+import 'package:vivahbharath_app/view/drawer/manage_interset_screen.dart';
+import 'package:vivahbharath_app/view/drawer/manage_request.dart';
+import 'package:vivahbharath_app/view/drawer/subscription_screen.dart';
 
+/// Placeholder shown while a member photo loads, or when there is none.
+Widget _photoPlaceholder() =>
+    const ColoredBox(color: AppColors.blueTint, child: Center(child: Icon(Icons.person, size: 40, color: AppColors.navy)));
 
+/// Member photo from the API, or a neutral placeholder.
+Widget _memberPhoto(String? url) => url == null
+    ? _photoPlaceholder()
+    : Image.network(url, fit: BoxFit.cover, alignment: Alignment.topCenter, errorBuilder: _avatarFallback);
 
-const _avatarFemale = 'assets/images/avatar_female.png';
-const _avatarMale = 'assets/images/avatar_male.png';
+bool _isOnline(MatchProfile p) => p.lastSeen == 'Online now';
+
+/// "Name" or the profile ID when the member hides their name.
+String _displayName(MatchProfile p) => p.nameHidden || p.name.isEmpty ? p.id : p.name;
+
+void _toast(BuildContext context, String msg) {
+  final m = ScaffoldMessenger.of(context);
+  m.hideCurrentSnackBar();
+  m.showSnackBar(SnackBar(
+    behavior: SnackBarBehavior.floating,
+    backgroundColor: AppColors.navy,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    content: Text(msg, style: const TextStyle(fontSize: 13)),
+  ));
+}
+
+void _push(BuildContext context, Widget page) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+
+void _goToTab(BuildContext context, int tab) => DashboardShell.of(context)?.goTo(tab);
 
 TextStyle _t(double size, FontWeight w, Color c, {double? height}) =>
     GoogleFonts.dmSans(fontSize: size, fontWeight: w, color: c, height: height);
@@ -31,8 +66,89 @@ class _HomeScreenState extends State<HomeScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
+  void initState() {
+    super.initState();
+    // After the first frame: the provider notifies as soon as a fetch starts.
+    CommonFunctions.afterInit(() {
+      if (mounted) context.read<HomeProvider>().getDashboard();
+    });
+  }
+
+  Future<void> _refresh() => context.read<HomeProvider>().getDashboard();
+
+  @override
   Widget build(BuildContext context) {
     final side = 16 + contentSidePadding(context);
+    final hp = context.watch<HomeProvider>();
+    final d = hp.dashboardModel;
+
+    // Errors on a refresh (with data already on screen) go to a snackbar.
+    if (d != null && hp.dashboardError != null && !hp.dashboardLoading) {
+      final msg = hp.dashboardError!;
+      hp.dashboardError = null;
+      CommonFunctions.afterInit(() {
+        if (mounted) _toast(context, msg);
+      });
+    }
+
+    final Widget body;
+    if (d == null) {
+      body = hp.dashboardError != null && !hp.dashboardLoading
+          ? _ErrorView(message: hp.dashboardError!, onRetry: _refresh)
+          : const Center(child: CircularProgressIndicator(color: AppColors.tealMid));
+    } else {
+      final counts = d.activityCounts;
+      body = RefreshIndicator(
+        color: AppColors.tealMid,
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(side, 16, side, 24),
+          children: [
+            _WelcomeCard(data: d),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _PillButton(icon: 'gift', label: 'Launch offer', onTap: () => _push(context, const SubscriptionScreen())),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _PillButton(
+                    icon: 'crown',
+                    label: d.subscription.isPremium && d.subscription.planName.isNotEmpty ? d.subscription.planName : 'Upgrade',
+                    onTap: () => _push(context, const SubscriptionScreen()),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _Recommendations(data: d.recommendations),
+            const SizedBox(height: 18),
+            const _SearchBar(),
+            if (d.fromYourSearch.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              _SectionHeader(title: 'From your search', onSeeAll: () => _goToTab(context, DashboardTab.search)),
+              const SizedBox(height: 12),
+              _FromYourSearch(profiles: d.fromYourSearch),
+            ],
+            const SizedBox(height: 22),
+            Text('Profile Activities', style: _t(20, FontWeight.w700, AppColors.navyDark)),
+            const SizedBox(height: 12),
+            _ActivityGrid(items: _profileActivities, counts: counts),
+            if (d.premiumMatches.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              _Highlighted(profiles: d.premiumMatches),
+            ],
+            const SizedBox(height: 22),
+            Text('My Activities', style: _t(20, FontWeight.w700, AppColors.navyDark)),
+            const SizedBox(height: 12),
+            _ActivityGrid(items: _myActivities, counts: counts),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: const HomeDrawer(),
@@ -48,43 +164,46 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Column(
           children: [
-            _TopPanel(onMenu: () => _scaffoldKey.currentState?.openDrawer()),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(side, 16, side, 24),
-                children: [
-                  const _WelcomeCard(),
-                  const SizedBox(height: 12),
-                  const Row(
-                    children: [
-                      Expanded(child: _PillButton(icon: 'gift', label: 'Launch offer')),
-                      SizedBox(width: 12),
-                      Expanded(child: _PillButton(icon: 'crown', label: 'Upgrade')),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const _Recommendations(),
-                  const SizedBox(height: 18),
-                  const _SearchBar(),
-                  const SizedBox(height: 22),
-                  _SectionHeader(title: 'From your search', onSeeAll: () {}),
-                  const SizedBox(height: 12),
-                  const _FromYourSearch(),
-                  const SizedBox(height: 22),
-                  Text('Profile Activities', style: _t(20, FontWeight.w700, AppColors.navyDark)),
-                  const SizedBox(height: 12),
-                  const _ActivityGrid(items: _profileActivities),
-                  const SizedBox(height: 22),
-                  const _Highlighted(),
-                  const SizedBox(height: 22),
-                  Text('My Activities', style: _t(20, FontWeight.w700, AppColors.navyDark)),
-                  const SizedBox(height: 12),
-                  const _ActivityGrid(items: _myActivities),
-                ],
-              ),
+            _TopPanel(
+              onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+              unreadMessages: d?.messages.unreadCount ?? 0,
+              unreadNotifications: d?.notifications.unreadCount ?? 0,
             ),
+            Expanded(child: body),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// First load failed: message + retry (pull-to-refresh also works).
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.onRetry});
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      color: AppColors.tealMid,
+      onRefresh: onRetry,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 48, color: AppColors.textMuted),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center, style: _t(16, FontWeight.w600, AppColors.navyDark)),
+          const SizedBox(height: 16),
+          Center(
+            child: FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.tealMid),
+              onPressed: onRetry,
+              child: const Text('Retry'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -95,8 +214,10 @@ class _HomeScreenState extends State<HomeScreen> {
 /// Soft white panel behind the top bar (runs up under the status bar),
 /// with rounded bottom corners like the mockup.
 class _TopPanel extends StatelessWidget {
-  const _TopPanel({required this.onMenu});
+  const _TopPanel({required this.onMenu, this.unreadMessages = 0, this.unreadNotifications = 0});
   final VoidCallback onMenu;
+  final int unreadMessages;
+  final int unreadNotifications;
 
   @override
   Widget build(BuildContext context) {
@@ -108,14 +229,18 @@ class _TopPanel extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
         boxShadow: [BoxShadow(color: AppColors.navy.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 4))],
       ),
-      child: MaxWidthBox(child: _TopBar(onMenu: onMenu)),
+      child: MaxWidthBox(
+        child: _TopBar(onMenu: onMenu, unreadMessages: unreadMessages, unreadNotifications: unreadNotifications),
+      ),
     );
   }
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onMenu});
+  const _TopBar({required this.onMenu, required this.unreadMessages, required this.unreadNotifications});
   final VoidCallback onMenu;
+  final int unreadMessages;
+  final int unreadNotifications;
 
   @override
   Widget build(BuildContext context) {
@@ -161,9 +286,15 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          _GoldCircleIcon(icon: 'chat', size: circle),
+          _GoldCircleIcon(
+            icon: 'chat',
+            size: circle,
+            badge: unreadMessages > 0 ? unreadMessages : null,
+            onTap: () => _goToTab(context, DashboardTab.inbox),
+          ),
           const SizedBox(width: 10),
-          _GoldCircleIcon(icon: 'bell', badge: 2, size: circle),
+          // TODO: open the notifications screen once it exists.
+          _GoldCircleIcon(icon: 'bell', badge: unreadNotifications > 0 ? unreadNotifications : null, size: circle),
         ],
       ),
     );
@@ -171,14 +302,15 @@ class _TopBar extends StatelessWidget {
 }
 
 class _GoldCircleIcon extends StatelessWidget {
-  const _GoldCircleIcon({required this.icon, required this.size, this.badge});
+  const _GoldCircleIcon({required this.icon, required this.size, this.badge, this.onTap});
   final String icon;
   final double size;
   final int? badge;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final child = SizedBox(
       width: size + 2,
       height: size + 2,
       child: Stack(
@@ -207,7 +339,7 @@ class _GoldCircleIcon extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  '$badge',
+                  badge! > 99 ? '99+' : '$badge',
                   // Fixed size: a badge must not grow with accessibility text.
                   textScaler: TextScaler.noScaling,
                   style: _t(11, FontWeight.w700, Colors.white),
@@ -217,16 +349,23 @@ class _GoldCircleIcon extends StatelessWidget {
         ],
       ),
     );
+    if (onTap == null) return child;
+    return InkWell(onTap: onTap, customBorder: const CircleBorder(), child: child);
   }
 }
 
 // ───────────────────────── Welcome card ─────────────────────────
 
 class _WelcomeCard extends StatelessWidget {
-  const _WelcomeCard();
+  const _WelcomeCard({required this.data});
+  final DashboardModel data;
 
   @override
   Widget build(BuildContext context) {
+    final p = data.profile;
+    final premium = p.isPremium || data.subscription.isPremium;
+    final greeting = data.greeting.isEmpty ? 'Welcome,' : (data.greeting.endsWith(',') ? data.greeting : '${data.greeting},');
+    final initial = p.initial.isNotEmpty ? p.initial : (p.name.isNotEmpty ? p.name[0].toUpperCase() : '?');
     final narrow = _isNarrow(context);
     final avatar = narrow ? 76.0 : 92.0;
     return Container(
@@ -244,7 +383,8 @@ class _WelcomeCard extends StatelessWidget {
         children: [
           // faint wave lines along the bottom
           const Positioned.fill(child: CustomPaint(painter: _CardWavePainter())),
-          // crown badge, top-right
+          // crown badge, top-right (premium members only)
+          if (premium)
           Positioned(
             top: 12,
             right: 12,
@@ -270,12 +410,22 @@ class _WelcomeCard extends StatelessWidget {
                       width: avatar,
                       height: avatar,
                       alignment: Alignment.center,
+                      clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(color: AppColors.goldBorder, width: 3),
                         gradient: const LinearGradient(colors: [Color(0xFFE8A55F), Color(0xFFB8672F)], begin: Alignment.topLeft, end: Alignment.bottomRight),
                       ),
-                      child: Text('P', textScaler: TextScaler.noScaling, style: _t(avatar * 0.45, FontWeight.w700, Colors.white)),
+                      child: p.imageUrl == null
+                          ? Text(initial, textScaler: TextScaler.noScaling, style: _t(avatar * 0.45, FontWeight.w700, Colors.white))
+                          : Image.network(
+                              p.imageUrl!,
+                              width: avatar,
+                              height: avatar,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  Text(initial, textScaler: TextScaler.noScaling, style: _t(avatar * 0.45, FontWeight.w700, Colors.white)),
+                            ),
                     ),
                     Positioned(
                       right: 0,
@@ -295,15 +445,15 @@ class _WelcomeCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Welcome,', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(14, FontWeight.w500, AppColors.goldBorder)),
-                      Text('Priyesh', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(22, FontWeight.w700, Colors.white)),
+                      Text(greeting, maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(14, FontWeight.w500, AppColors.goldBorder)),
+                      Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(22, FontWeight.w700, Colors.white)),
                       const SizedBox(height: 4),
                       Row(
                         children: [
                           const AppIcon('profile_id', size: 16, color: AppColors.goldBorder),
                           const SizedBox(width: 6),
                           Flexible(
-                            child: Text('VBM26836413F', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w500, AppColors.goldBorder)),
+                            child: Text(p.profileId, maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w500, AppColors.goldBorder)),
                           ),
                         ],
                       ),
@@ -314,7 +464,7 @@ class _WelcomeCard extends StatelessWidget {
                 // Pushed down so it sits below the crown badge.
                 Padding(
                   padding: const EdgeInsets.only(top: 30),
-                  child: _ProfileRing(percent: 0.63, size: narrow ? 70 : 78),
+                  child: _ProfileRing(percent: data.profileCompletion.percentage / 100, size: narrow ? 70 : 78),
                 ),
               ],
             ),
@@ -381,7 +531,7 @@ class _ProfileRing extends StatelessWidget {
             width: size - 16,
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text('Complete\nyour profile', textAlign: TextAlign.center, style: _t(11, FontWeight.w700, Colors.white, height: 1.2)),
+              child: Text(percent >= 1 ? 'Profile\ncomplete' : 'Complete\nyour profile', textAlign: TextAlign.center, style: _t(11, FontWeight.w700, Colors.white, height: 1.2)),
             ),
           ),
           Positioned(
@@ -401,15 +551,16 @@ class _ProfileRing extends StatelessWidget {
 
 /// Cream pill with gold border (Launch offer / Upgrade / Send Interest).
 class _PillButton extends StatelessWidget {
-  const _PillButton({required this.icon, required this.label, this.fontSize = 16, this.minHeight = 52});
+  const _PillButton({required this.icon, required this.label, this.fontSize = 16, this.minHeight = 52, this.onTap});
   final String icon;
   final String label;
   final double fontSize;
   final double minHeight;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final pill = Container(
       constraints: BoxConstraints(minHeight: minHeight),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -427,6 +578,11 @@ class _PillButton extends StatelessWidget {
           ),
         ],
       ),
+    );
+    if (onTap == null) return pill;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(minHeight / 2), child: pill),
     );
   }
 }
@@ -507,16 +663,39 @@ class _HScroll extends StatelessWidget {
 }
 
 class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({required this.female, this.verified = false, this.online = false, this.hasPhoto = false, this.premium = false});
-  final bool female;
-  final bool verified;
-  final bool online;
-  final bool hasPhoto;
+  const _ProfileCard({required this.profile, this.premium = false});
+  final MatchProfile profile;
   final bool premium;
+
+  Future<void> _toggleShortlist(BuildContext context) async {
+    final now = await context.read<HomeProvider>().toggleHomeShortlist(profile);
+    if (!context.mounted) return;
+    _toast(
+      context,
+      now == null ? 'Could not update your shortlist. Please try again' : (now ? 'Added to your shortlist' : 'Removed from your shortlist'),
+    );
+  }
+
+  void _sendInterest(BuildContext context) {
+    if (profile.status == InterestStatus.awaiting || profile.status == InterestStatus.accepted) return;
+    context.read<HomeProvider>().markHomeInterestSent(profile);
+    _toast(context, 'Interest sent to ${_displayName(profile)}');
+  }
 
   @override
   Widget build(BuildContext context) {
+    final p = profile;
     final width = _isNarrow(context) ? 175.0 : 195.0;
+    final verified = p.verified;
+    final online = _isOnline(p);
+    final hasPhoto = p.photoUrl != null;
+    final details = [p.city, p.profession].where((s) => s.isNotEmpty).join(' · ');
+    final (interestIcon, interestLabel) = switch (p.status) {
+      InterestStatus.send => ('send', 'Send Interest'),
+      InterestStatus.awaiting => ('clock', 'Interest Sent'),
+      InterestStatus.resend => ('send', 'Resend Interest'),
+      InterestStatus.accepted => ('interest_accepted', 'Connected'),
+    };
     return Container(
       width: width,
       padding: const EdgeInsets.all(8),
@@ -536,29 +715,40 @@ class _ProfileCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.asset(female ? _avatarFemale : _avatarMale, fit: BoxFit.cover, alignment: Alignment.topCenter, errorBuilder: _avatarFallback),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(color: premium ? AppColors.gold : Colors.white, shape: BoxShape.circle),
-                      child: Center(
-                        child: premium
-                            ? const AppIcon('crown', size: 14, color: AppColors.tealDark)
-                            : (verified ? const AppIcon('verified', size: 15, color: AppColors.verified) : const SizedBox()),
+                  _memberPhoto(p.photoUrl),
+                  if (premium || verified)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(color: premium ? AppColors.gold : Colors.white, shape: BoxShape.circle),
+                        child: Center(
+                          child: premium
+                              ? const AppIcon('crown', size: 14, color: AppColors.tealDark)
+                              : const AppIcon('verified', size: 15, color: AppColors.verified),
+                        ),
                       ),
                     ),
-                  ),
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), shape: BoxShape.circle),
-                      child: const Center(child: AppIcon('heart', size: 18, color: AppColors.navy)),
+                    child: Semantics(
+                      button: true,
+                      label: p.shortlisted ? 'Remove from shortlist' : 'Add to shortlist',
+                      child: InkWell(
+                        onTap: () => _toggleShortlist(context),
+                        customBorder: const CircleBorder(),
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), shape: BoxShape.circle),
+                          child: Center(
+                            child: AppIcon(p.shortlisted ? 'heart_filled' : 'heart', size: 18, color: p.shortlisted ? AppColors.coral : AppColors.navy),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   Positioned(
@@ -583,21 +773,39 @@ class _ProfileCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Text('[Name], [Age]', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(16, FontWeight.w700, AppColors.navyDark)),
+          Text(
+            p.age == null ? _displayName(p) : '${_displayName(p)}, ${p.age}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _t(16, FontWeight.w700, AppColors.navyDark),
+          ),
           const SizedBox(height: 2),
-          Text('[City] · [Profession]', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w400, AppColors.textMuted)),
+          Text(details.isEmpty ? ' ' : details, maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w400, AppColors.textMuted)),
           const SizedBox(height: 10),
-          const _PillButton(icon: 'send', label: 'Send Interest', fontSize: 15, minHeight: 44),
+          _PillButton(icon: interestIcon, label: interestLabel, fontSize: 15, minHeight: 44, onTap: () => _sendInterest(context)),
         ],
       ),
     );
   }
 }
 
+/// Muted one-liner for a section with no profiles.
+class _EmptyNote extends StatelessWidget {
+  const _EmptyNote(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+        child: Text(text, style: _t(14, FontWeight.w400, AppColors.textMuted)),
+      );
+}
+
 // ───────────────────────── Recommendations ─────────────────────────
 
 class _Recommendations extends StatelessWidget {
-  const _Recommendations();
+  const _Recommendations({required this.data});
+  final Recommendations data;
 
   @override
   Widget build(BuildContext context) {
@@ -613,15 +821,21 @@ class _Recommendations extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 4, right: 12),
-            child: _SectionHeader(title: 'Recommendations for you', subtitle: 'Based on your partner preferences', onSeeAll: () {}),
+            child: _SectionHeader(
+              title: data.title,
+              subtitle: data.subtitle,
+              onSeeAll: () => _goToTab(context, DashboardTab.matches),
+            ),
           ),
           const SizedBox(height: 12),
-          const _HScroll(
-            children: [
-              _ProfileCard(female: true, verified: true, online: true, hasPhoto: true),
-              _ProfileCard(female: false, verified: true, hasPhoto: true),
-            ],
-          ),
+          if (data.profiles.isEmpty)
+            _EmptyNote(
+              data.hasPartnerPreferences
+                  ? 'No recommendations right now. Check back soon.'
+                  : 'Set your partner preferences to get recommendations.',
+            )
+          else
+            _HScroll(children: [for (final p in data.profiles) _ProfileCard(profile: p)]),
         ],
       ),
     );
@@ -636,70 +850,35 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final narrow = _isNarrow(context);
-    return Container(
-      constraints: const BoxConstraints(minHeight: 56),
-      padding: EdgeInsets.symmetric(horizontal: narrow ? 14 : 18, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _goToTab(context, DashboardTab.search),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.blueTintBorder),
-      ),
-      child: Row(
-        children: [
-          const AppIcon('search', size: 22, color: AppColors.navy),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text('Search', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(17, FontWeight.w700, AppColors.navyDark)),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: EdgeInsets.symmetric(horizontal: narrow ? 14 : 18, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: AppColors.blueTintBorder),
           ),
-          const AppIcon('chevron_down', size: 20, color: AppColors.navy),
-          SizedBox(width: narrow ? 8 : 12),
-          Container(width: 1, height: 28, color: AppColors.blueTintBorder),
-          SizedBox(width: narrow ? 10 : 14),
-          const AppIcon('profile_id', size: 20, color: AppColors.hint),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text('Profile ID search', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(15, FontWeight.w400, AppColors.hint)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FromYourSearch extends StatelessWidget {
-  const _FromYourSearch();
-
-  @override
-  Widget build(BuildContext context) {
-    return _HScroll(
-      spacing: 14,
-      children: List.generate(
-        5,
-        (i) => SizedBox(
-          width: 68,
-          child: Column(
+          child: Row(
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.goldBorder, width: 2.5)),
-                    child: ClipOval(child: Image.asset(i.isEven ? _avatarFemale : _avatarMale, fit: BoxFit.cover, errorBuilder: _avatarFallback)),
-                  ),
-                  if (i != 4)
-                    Positioned(
-                      right: 2,
-                      bottom: 2,
-                      child: Container(width: 14, height: 14, decoration: BoxDecoration(color: AppColors.online, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2))),
-                    ),
-                ],
+              const AppIcon('search', size: 22, color: AppColors.navy),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Search', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(17, FontWeight.w700, AppColors.navyDark)),
               ),
-              const SizedBox(height: 6),
-              Text('[Name]', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w700, AppColors.navyDark)),
-              Text('[Age]', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w400, AppColors.textMuted)),
+              const AppIcon('chevron_down', size: 20, color: AppColors.navy),
+              SizedBox(width: narrow ? 8 : 12),
+              Container(width: 1, height: 28, color: AppColors.blueTintBorder),
+              SizedBox(width: narrow ? 10 : 14),
+              const AppIcon('profile_id', size: 20, color: AppColors.hint),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text('Profile ID search', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(15, FontWeight.w400, AppColors.hint)),
+              ),
             ],
           ),
         ),
@@ -708,12 +887,89 @@ class _FromYourSearch extends StatelessWidget {
   }
 }
 
+class _FromYourSearch extends StatelessWidget {
+  const _FromYourSearch({required this.profiles});
+  final List<MatchProfile> profiles;
+
+  @override
+  Widget build(BuildContext context) {
+    return _HScroll(
+      spacing: 14,
+      children: [
+        for (final p in profiles)
+          SizedBox(
+            width: 68,
+            child: Column(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.goldBorder, width: 2.5)),
+                      child: ClipOval(child: _memberPhoto(p.photoUrl)),
+                    ),
+                    if (_isOnline(p))
+                      Positioned(
+                        right: 2,
+                        bottom: 2,
+                        child: Container(width: 14, height: 14, decoration: BoxDecoration(color: AppColors.online, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2))),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(_displayName(p), maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w700, AppColors.navyDark)),
+                Text(p.age == null ? ' ' : '${p.age}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w400, AppColors.textMuted)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 // ───────────────────────── Activities ─────────────────────────
 
+/// Which dashboard counter a tile shows, and where tapping it goes.
+enum _ActivityKind {
+  whoViewedMe,
+  shortlistedMe,
+  interestAccepted,
+  requestApproved,
+  viewedByMe,
+  shortlistedByMe,
+  interestSent,
+  requestSent;
+
+  int count(ActivityCounts c) => switch (this) {
+        whoViewedMe => c.whoViewedMe,
+        shortlistedMe => c.shortlistedMe,
+        interestAccepted => c.myInterestAccepted,
+        requestApproved => c.myRequestApproved,
+        viewedByMe => c.viewedByMe,
+        shortlistedByMe => c.shortlistedByMe,
+        interestSent => c.interestSent,
+        requestSent => c.requestSent,
+      };
+
+  Widget page() => switch (this) {
+        whoViewedMe => const MatchesScreen(initialTab: MatchTab.viewedYou),
+        shortlistedMe => const MatchesScreen(initialTab: MatchTab.shortlistedYou),
+        viewedByMe => const MatchesScreen(initialTab: MatchTab.viewedByYou),
+        shortlistedByMe => const MatchesScreen(initialTab: MatchTab.shortlistedByYou),
+        interestAccepted => const ManageInterestScreen(initialTab: 1, initialFilter: ActStatus.accepted),
+        interestSent => const ManageInterestScreen(initialTab: 1),
+        requestApproved => const ManageRequestScreen(initialTab: 1, initialFilter: ActStatus.accepted),
+        requestSent => const ManageRequestScreen(initialTab: 1),
+      };
+}
+
 class _Activity {
-  const _Activity(this.icon, this.count, this.title, this.sub, this.iconBg, this.iconFg, this.countColor, this.tintFrom);
+  const _Activity(this.kind, this.icon, this.title, this.sub, this.iconBg, this.iconFg, this.countColor, this.tintFrom);
+  final _ActivityKind kind;
   final String icon;
-  final int count;
   final String title;
   final String sub;
   final Color iconBg;
@@ -728,24 +984,25 @@ const _rose = Color(0xFFFADDD6);
 const _lilac = Color(0xFFE6E1F6);
 
 const _profileActivities = [
-  _Activity('eye', 1, 'Who Viewed Me', "See who's curious about you", _blue, AppColors.navy, AppColors.navy, Color(0xFFEAF0FA)),
-  _Activity('star', 1, 'Shortlisted Me', "You're on their favourite list!", _amber, AppColors.goldDark, AppColors.brown, Color(0xFFFCF2E1)),
-  _Activity('interest_accepted', 0, 'Interest Accepted', "Great news! It's a mutual match", _rose, AppColors.coral, AppColors.coral, Color(0xFFFCE9E4)),
-  _Activity('request_approved', 0, 'Request Approved', 'You can now view their info', _lilac, AppColors.purple, AppColors.purple, Color(0xFFEFEBFA)),
+  _Activity(_ActivityKind.whoViewedMe, 'eye', 'Who Viewed Me', "See who's curious about you", _blue, AppColors.navy, AppColors.navy, Color(0xFFEAF0FA)),
+  _Activity(_ActivityKind.shortlistedMe, 'star', 'Shortlisted Me', "You're on their favourite list!", _amber, AppColors.goldDark, AppColors.brown, Color(0xFFFCF2E1)),
+  _Activity(_ActivityKind.interestAccepted, 'interest_accepted', 'Interest Accepted', "Great news! It's a mutual match", _rose, AppColors.coral, AppColors.coral, Color(0xFFFCE9E4)),
+  _Activity(_ActivityKind.requestApproved, 'request_approved', 'Request Approved', 'You can now view their info', _lilac, AppColors.purple, AppColors.purple, Color(0xFFEFEBFA)),
 ];
 
 const _myActivities = [
-  _Activity('eye', 4, 'Viewed', "Profiles you've checked out", _blue, AppColors.navy, AppColors.navy, Color(0xFFEAF0FA)),
-  _Activity('bookmark', 0, 'Shortlisted', 'Your saved favourites', _amber, AppColors.goldDark, AppColors.brown, Color(0xFFFCF2E1)),
-  _Activity('send', 0, 'Interest Sent', "Profiles you've shown interest in", _rose, AppColors.coral, AppColors.coral, Color(0xFFFCE9E4)),
-  _Activity('clock', 0, 'Request Sent', 'Contact requests awaiting reply', _lilac, AppColors.purple, AppColors.purple, Color(0xFFEFEBFA)),
+  _Activity(_ActivityKind.viewedByMe, 'eye', 'Viewed', "Profiles you've checked out", _blue, AppColors.navy, AppColors.navy, Color(0xFFEAF0FA)),
+  _Activity(_ActivityKind.shortlistedByMe, 'bookmark', 'Shortlisted', 'Your saved favourites', _amber, AppColors.goldDark, AppColors.brown, Color(0xFFFCF2E1)),
+  _Activity(_ActivityKind.interestSent, 'send', 'Interest Sent', "Profiles you've shown interest in", _rose, AppColors.coral, AppColors.coral, Color(0xFFFCE9E4)),
+  _Activity(_ActivityKind.requestSent, 'clock', 'Request Sent', 'Contact requests awaiting reply', _lilac, AppColors.purple, AppColors.purple, Color(0xFFEFEBFA)),
 ];
 
 /// 2 columns on phones, 4 on wide content. Each row is as tall as its
 /// tallest tile (instead of a fixed aspect ratio that clips long titles).
 class _ActivityGrid extends StatelessWidget {
-  const _ActivityGrid({required this.items});
+  const _ActivityGrid({required this.items, required this.counts});
   final List<_Activity> items;
+  final ActivityCounts counts;
 
   @override
   Widget build(BuildContext context) {
@@ -764,7 +1021,9 @@ class _ActivityGrid extends StatelessWidget {
                   for (var j = 0; j < cols; j++) ...[
                     if (j > 0) const SizedBox(width: 12),
                     Expanded(
-                      child: j < rowItems.length ? _ActivityTile(a: rowItems[j]) : const SizedBox(),
+                      child: j < rowItems.length
+                          ? _ActivityTile(a: rowItems[j], count: rowItems[j].kind.count(counts))
+                          : const SizedBox(),
                     ),
                   ],
                 ],
@@ -779,41 +1038,53 @@ class _ActivityGrid extends StatelessWidget {
 }
 
 class _ActivityTile extends StatelessWidget {
-  const _ActivityTile({required this.a});
+  const _ActivityTile({required this.a, required this.count});
   final _Activity a;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: a.iconBg),
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [a.tintFrom, Colors.white]),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        onTap: () async {
+          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => a.kind.page()));
+          // Counts may have changed on the screen we opened.
+          if (context.mounted) context.read<HomeProvider>().getDashboard();
+        },
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: a.iconBg),
+            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [a.tintFrom, Colors.white]),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: a.iconBg, borderRadius: BorderRadius.circular(12)),
-                child: Center(child: AppIcon(a.icon, size: 20, color: a.iconFg)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: a.iconBg, borderRadius: BorderRadius.circular(12)),
+                    child: Center(child: AppIcon(a.icon, size: 20, color: a.iconFg)),
+                  ),
+                  Flexible(
+                    child: Text('$count', maxLines: 1, style: _t(28, FontWeight.w800, a.countColor)),
+                  ),
+                ],
               ),
-              Flexible(
-                child: Text('${a.count}', maxLines: 1, style: _t(28, FontWeight.w800, a.countColor)),
-              ),
+              const SizedBox(height: 14),
+              const Spacer(),
+              Text(a.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: _t(16, FontWeight.w700, AppColors.navyDark)),
+              const SizedBox(height: 2),
+              Text(a.sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w400, AppColors.textMuted, height: 1.25)),
             ],
           ),
-          const SizedBox(height: 14),
-          const Spacer(),
-          Text(a.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: _t(16, FontWeight.w700, AppColors.navyDark)),
-          const SizedBox(height: 2),
-          Text(a.sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w400, AppColors.textMuted, height: 1.25)),
-        ],
+        ),
       ),
     );
   }
@@ -822,7 +1093,8 @@ class _ActivityTile extends StatelessWidget {
 // ───────────────────────── Highlighted ─────────────────────────
 
 class _Highlighted extends StatelessWidget {
-  const _Highlighted();
+  const _Highlighted({required this.profiles});
+  final List<MatchProfile> profiles;
 
   @override
   Widget build(BuildContext context) {
@@ -843,17 +1115,12 @@ class _Highlighted extends StatelessWidget {
                 const AppIcon('crown', size: 22, color: AppColors.goldDark),
                 const SizedBox(width: 8),
                 Expanded(child: Text('Highlighted Profiles', style: _t(20, FontWeight.w700, AppColors.navyDark))),
-                _SeeAll(onTap: () {}),
+                _SeeAll(onTap: () => _goToTab(context, DashboardTab.matches)),
               ],
             ),
           ),
           const SizedBox(height: 12),
-          const _HScroll(
-            children: [
-              _ProfileCard(female: true, premium: true),
-              _ProfileCard(female: false, premium: true, online: true),
-            ],
-          ),
+          _HScroll(children: [for (final p in profiles) _ProfileCard(profile: p, premium: true)]),
         ],
       ),
     );

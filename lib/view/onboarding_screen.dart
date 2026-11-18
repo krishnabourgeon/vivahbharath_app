@@ -115,7 +115,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             Navigator.pushAndRemoveUntil(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const DashboardShell()
+                                builder: (context) => const LoginScreen()
                                 //LoginScreen(),
                               ),
                               (route) => false,

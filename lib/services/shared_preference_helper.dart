@@ -47,6 +47,33 @@ class SharedPreferenceHelper {
     AppConfig.accessToken = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove("token");
+    await prefs.remove("subscription_chosen");
+    await prefs.remove("is_approved");
+  }
+
+  // Whether admin has approved the profile (from the sign-in response).
+  // Defaults to true so members who logged in before this flag existed
+  // aren't sent to the pending screen.
+  static Future<void> saveApproved(bool approved) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool("is_approved", approved);
+  }
+
+  static Future<bool> isApproved() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool("is_approved") ?? true;
+  }
+
+  // Remembers that the signed-in member has picked a package, so the next
+  // launch / login goes straight to the dashboard.
+  static Future<void> saveSubscriptionChosen(bool chosen) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool("subscription_chosen", chosen);
+  }
+
+  static Future<bool> isSubscriptionChosen() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool("subscription_chosen") ?? false;
   }
 
   // Marks that this device has finished the onboarding wizard at least once.

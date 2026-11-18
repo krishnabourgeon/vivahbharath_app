@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:vivahbharath_app/function.dart';
+import 'package:vivahbharath_app/provider/register_provider.dart';
 import 'package:vivahbharath_app/services/register_helpers.dart';
+import 'package:vivahbharath_app/services/service_config.dart';
 import 'package:vivahbharath_app/services/validation_helper.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/custom/responsive.dart';
 import 'package:vivahbharath_app/view/forgot_password/forgot_password_screen.dart';
 import 'package:vivahbharath_app/view/register/register_screen.dart';
-import 'package:vivahbharath_app/view/register/verify_otp_screen.dart';
+import 'package:vivahbharath_app/view/register/sign_in_verify_otp_screen.dart';
+import 'package:vivahbharath_app/view/register/sign_upverify_otp_screen.dart';
 
 enum _LoginMode { otp, password }
 
@@ -49,21 +53,25 @@ class _LoginScreenState extends State<LoginScreen> {
       return showMsg('Please provide a valid 10-digit mobile number');
     }
 
+    final rp = context.read<RegisterProvider>();
     setState(() => _busy = true);
-    // TODO: call your login-OTP API here and return if it fails, e.g.
-    // final ok = await context.read<LoginProvider>().sendLoginOtp(phone);
-    const ok = true;
+    // login_type 1 = OTP: the API sends an OTP to this number
+    final ok = await rp.signIn(phone, LoginType.otp);
     if (!mounted) return;
     setState(() => _busy = false);
 
-    if (!ok) return showMsg('Could not send OTP. Please try again');
+    if (!ok) {
+      return showMsg(rp.signInError ?? 'Could not send OTP. Please try again');
+    }
+    if (rp.signInModel?.message != null) showMsg(rp.signInModel!.message!);
 
     final masked =
         '+91 ${phone.substring(0, 2)}••••••${phone.substring(phone.length - 2)}';
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => VerifyCodeScreen(mobile: phone, maskedPhone: masked),
+        builder: (context) =>
+            SignInVerifyCodeScreen(mobile: phone, maskedPhone: masked),
       ),
     );
   }
@@ -82,23 +90,38 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (pass.isEmpty) return showMsg('Please enter your password');
 
+    final rp = context.read<RegisterProvider>();
     setState(() => _busy = true);
-    // TODO: call your password-login API here, e.g.
-    // final ok = await context.read<LoginProvider>().login(id, pass);
-    const ok = true;
+    // login_type 2 = password: the API returns the token directly
+    final ok = await rp.signIn(id, LoginType.password, password: pass);
     if (!mounted) return;
     setState(() => _busy = false);
 
-    if (!ok) return showMsg('Login failed. Please try again');
-    // TODO: navigate to home after a successful login
+    if (!ok) {
+      return showMsg(rp.signInError ?? 'Login failed. Please try again');
+    }
+    if (rp.signInModel?.message != null) showMsg(rp.signInModel!.message!);
+    await routeAfterSignIn(
+      context,
+      registrationCompleted: rp.signInModel?.data?.registrationCompleted ?? false,
+      isApproved: rp.signInModel?.data?.isApproved,
+      subscriptionChosen: rp.signInModel?.data?.subscriptionChosen,
+    );
   }
 
   void _onForgotPassword() {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => ForgotPasswordScreen(),));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ForgotPasswordScreen()),
+    );
   }
 
   void _onRegister() {
-    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => RegisterScreen(),), (route) => false,);
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => RegisterScreen()),
+      (route) => false,
+    );
   }
 
   @override

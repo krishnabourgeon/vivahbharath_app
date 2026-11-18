@@ -28,26 +28,53 @@ class MatchesProvider extends ChangeNotifier {
 
   final Map<MatchTab, MatchPage> _pages = {};
 
-  /// Members hidden with "Don't show" during this session, by [MatchProfile.key].
-  // TODO: persist once the backend exposes a hide / unhide endpoint.
+  // "Don't show": the list comes from `matches/hidden` (the dontShow page).
+  // Hiding / unhiding is only kept for this session on top of that list.
+  // TODO: call the hide / unhide endpoints once the backend exposes them.
+
+  /// Members hidden during this session, by [MatchProfile.key].
   final Map<String, MatchProfile> _hidden = {};
+
+  /// Members unhidden during this session (overrides the server's list).
+  final Set<String> _unhidden = {};
 
   MatchPage page(MatchTab tab) => _pages.putIfAbsent(tab, MatchPage.new);
 
-  bool isHidden(MatchProfile p) => p.hidden || _hidden.containsKey(p.key);
-  int get hiddenCount => _hidden.length;
+  Set<String> get _serverHiddenKeys =>
+      {for (final p in _pages[MatchTab.dontShow]?.items ?? const []) p.key};
+
+  bool isHidden(MatchProfile p) =>
+      !_unhidden.contains(p.key) &&
+      (p.hidden ||
+          _hidden.containsKey(p.key) ||
+          _serverHiddenKeys.contains(p.key));
+
+  /// Total members in "Marked as Don't Show" (server total + this session's
+  /// hides that aren't in the loaded list yet).
+  int get hiddenCount {
+    final pg = page(MatchTab.dontShow);
+    final server = pg.loaded ? (pg.total ?? pg.items.length) : 0;
+    final serverKeys = _serverHiddenKeys;
+    return server + _hidden.keys.where((k) => !serverKeys.contains(k)).length;
+  }
 
   /// Rows to show for [tab]; hidden members are filtered out of every tab
   /// except "Marked as Don't Show", which lists only them.
   List<MatchProfile> visible(MatchTab tab) {
     if (tab == MatchTab.dontShow) {
-      return _hidden.values.toList(growable: false);
+      final serverRows = page(tab).items;
+      final serverKeys = {for (final p in serverRows) p.key};
+      return [
+        // Hidden just now first, then the server's list.
+        for (final p in _hidden.values)
+          if (!serverKeys.contains(p.key)) p,
+        ...serverRows.where((p) => !_unhidden.contains(p.key)),
+      ];
     }
     return page(tab).items.where((p) => !isHidden(p)).toList(growable: false);
   }
 
-  bool isSupported(MatchTab tab) =>
-      tab == MatchTab.dontShow || tab.endpoint != null;
+  bool isSupported(MatchTab tab) => tab.endpoint != null;
 
   // ── Loading ───────────────────────────────────────────────────────────────
   /// Loads the first page of [tab] unless it's already loaded.
@@ -127,13 +154,14 @@ class MatchesProvider extends ChangeNotifier {
         return null;
       }
       final shortlisted = tab == MatchTab.shortlistedByYou;
+      final hiddenTab = tab == MatchTab.dontShow;
       final profiles = [
         for (final e in list)
           if (e is Map)
             MatchProfile.fromJson(
               Map<String, dynamic>.from(e),
               shortlisted: shortlisted,
-            ),
+            )..hidden = hiddenTab || _bool(e['is_hidden']),
       ];
       return (profiles, _findTotal(body));
     } catch (e) {
@@ -150,6 +178,9 @@ class MatchesProvider extends ChangeNotifier {
   Future<bool?> toggleShortlist(MatchProfile p) async {
     final id = p.apiId;
     if (id == null) return null;
+    // Ignore taps while this member's previous toggle is still in flight;
+    // a second request would flip the server state back.
+    if (!_shortlistBusy.add(p.key)) return p.shortlisted;
     final before = p.shortlisted;
     _setShortlisted(p, !before);
 
@@ -159,14 +190,37 @@ class MatchesProvider extends ChangeNotifier {
         final now =
             (res.asValue!.value as ShortListModel).shortlisted ?? !before;
         _setShortlisted(p, now);
-        _invalidate(MatchTab.shortlistedByYou);
+        _syncShortlistedByYou(p, now);
         return now;
       }
     } catch (e) {
       debugPrint('MatchesProvider: shortlist $id failed: $e');
+    } finally {
+      _shortlistBusy.remove(p.key);
     }
     _setShortlisted(p, before);
     return null;
+  }
+
+  final Set<String> _shortlistBusy = {};
+
+  /// Keeps the "Shortlisted By You" tab in step with a toggle made anywhere:
+  /// a removed member drops out of it at once; an added one shows up on the
+  /// tab's next load.
+  void _syncShortlistedByYou(MatchProfile p, bool shortlisted) {
+    final pg = _pages[MatchTab.shortlistedByYou];
+    if (pg == null) return;
+    if (shortlisted) {
+      _invalidate(MatchTab.shortlistedByYou);
+      return;
+    }
+    final before = pg.items.length;
+    pg.items.removeWhere((q) => q.key == p.key);
+    final removed = before - pg.items.length;
+    if (removed > 0 && pg.total != null) {
+      pg.total = (pg.total! - removed).clamp(0, pg.total!);
+    }
+    notifyListeners();
   }
 
   /// Marks the same member shortlisted/unshortlisted in every loaded tab.
@@ -193,6 +247,7 @@ class MatchesProvider extends ChangeNotifier {
   }
 
   void hide(MatchProfile p) {
+    _unhidden.remove(p.key);
     _hidden[p.key] = p;
     notifyListeners();
   }
@@ -205,6 +260,17 @@ class MatchesProvider extends ChangeNotifier {
         if (q.key == p.key) q.hidden = false;
       }
     }
+    // Was on the server's list: keep it out of "Don't show" from now on.
+    final hiddenPg = _pages[MatchTab.dontShow];
+    if (hiddenPg != null && hiddenPg.items.any((q) => q.key == p.key)) {
+      _unhidden.add(p.key);
+      final before = hiddenPg.items.length;
+      hiddenPg.items.removeWhere((q) => q.key == p.key);
+      final removed = before - hiddenPg.items.length;
+      if (hiddenPg.total != null) {
+        hiddenPg.total = (hiddenPg.total! - removed).clamp(0, hiddenPg.total!);
+      }
+    }
     notifyListeners();
   }
 
@@ -215,6 +281,7 @@ class MatchesProvider extends ChangeNotifier {
   void clear() {
     _pages.clear();
     _hidden.clear();
+    _unhidden.clear();
     notifyListeners();
   }
 
@@ -249,6 +316,9 @@ class MatchesProvider extends ChangeNotifier {
     final data = body['data'];
     return data is Map ? _findTotal(data) : null;
   }
+
+  static bool _bool(dynamic v) =>
+      v == true || v == 1 || v == '1' || v == 'true';
 
   static String? _bodyMessage(dynamic body) =>
       body is Map && body['message'] is String ? body['message'] : null;

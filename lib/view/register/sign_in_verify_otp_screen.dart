@@ -591,23 +591,23 @@ import 'package:vivahbharath_app/provider/register_provider.dart';
 import 'package:vivahbharath_app/services/register_helpers.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/custom/responsive.dart';
-import 'package:vivahbharath_app/view/register/basic_info_screen.dart';
+import 'package:vivahbharath_app/services/service_config.dart';
 
-class VerifyCodeScreen extends StatefulWidget {
+class SignInVerifyCodeScreen extends StatefulWidget {
   /// 10-digit number the OTP was sent to (used for verify / resend).
   final String mobile;
   final String maskedPhone;
-  const VerifyCodeScreen({
+  const SignInVerifyCodeScreen({
     super.key,
     required this.mobile,
     this.maskedPhone = '+91 98••••••12',
   });
 
   @override
-  State<VerifyCodeScreen> createState() => _VerifyCodeScreenState();
+  State<SignInVerifyCodeScreen> createState() => _SignInVerifyCodeScreenState();
 }
 
-class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
+class _SignInVerifyCodeScreenState extends State<SignInVerifyCodeScreen> {
   static const _length = 4;
   static const _resendSeconds = 30;
 
@@ -664,16 +664,24 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
     final rp = context.read<RegisterProvider>();
     setState(() => _busy = true);
     // the token is stored by the service layer on success
-    final ok = await rp.verifyOtp(widget.mobile, int.parse(code));
+    final ok = await rp.signinverifyOtp(widget.mobile, int.parse(code));
     if (!mounted) return;
     setState(() => _busy = false);
 
     if (!ok) {
-      return showMsg(rp.verifyOtpError ?? 'Invalid OTP. Please try again');
+      return showMsg(
+        rp.signinverifyOtpError ?? 'Invalid OTP. Please try again',
+      );
     }
-    Navigator.push(
+    final data = rp.signinverifyOtpModel?.data;
+    if (rp.signinverifyOtpModel?.message != null) {
+      showMsg(rp.signinverifyOtpModel!.message);
+    }
+    await routeAfterSignIn(
       context,
-      MaterialPageRoute(builder: (context) => BasicInfoScreen()),
+      registrationCompleted: data?.registrationCompleted ?? false,
+      isApproved: data?.isApproved,
+      subscriptionChosen: data?.subscriptionChosen,
     );
   }
 
@@ -681,8 +689,8 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
     if (_busy) return;
     final rp = context.read<RegisterProvider>();
     setState(() => _busy = true);
-    // The account already exists after signup, so sign-in re-sends the OTP.
-    final ok = await rp.signIn(widget.mobile);
+    // Calling signin again with login_type 1 (OTP) re-sends the login OTP.
+    final ok = await rp.signIn(widget.mobile, LoginType.otp);
     if (!mounted) return;
     setState(() => _busy = false);
 

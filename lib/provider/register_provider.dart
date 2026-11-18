@@ -20,6 +20,8 @@ import 'package:vivahbharath_app/model/family_statuses.dart';
 import 'package:vivahbharath_app/model/family_type_model.dart';
 import 'package:vivahbharath_app/model/family_values_model.dart';
 import 'package:vivahbharath_app/model/gender_model.dart';
+import 'package:vivahbharath_app/model/sign_up_verify_otp_model.dart';
+import 'package:vivahbharath_app/model/signin_verify_otp_model.dart';
 import 'package:vivahbharath_app/view/custom/gender_avatr.dart';
 import 'package:vivahbharath_app/model/get_subscriptionmodel.dart';
 import 'package:vivahbharath_app/model/choose_subscription_model.dart';
@@ -46,7 +48,6 @@ import 'package:vivahbharath_app/model/states_model.dart';
 import 'package:vivahbharath_app/model/stars_model.dart';
 import 'package:vivahbharath_app/model/subcaste_model.dart';
 import 'package:vivahbharath_app/model/value_slab_model.dart';
-import 'package:vivahbharath_app/model/verify_otp_model.dart';
 import 'package:vivahbharath_app/services/provider_helper_class.dart';
 
 class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
@@ -66,7 +67,9 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
   SignInModel? signInModel;
   String? signInError;
   GenderModel? genderModel;
-  VerifyOtpModel? verifyOtpModel;
+  SignUpVerifyOtpModel? verifyOtpModel;
+  SignInVerifyOtpModel? signinverifyOtpModel;
+  String? signinverifyOtpError;
   String? verifyOtpError;
   BasicInfoModel? basicInfoModel;
   String? basicInfoError;
@@ -110,7 +113,7 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
   ImageTypesModel? imageTypesModel;
   PhotosModel? photosModel;
   String? photosError;
-  GetSubscriptionModel? getSubscriptionModel;
+  SubscriptionModel? getSubscriptionModel;
 
   @override
   void updateLoadState(LoaderState state) {
@@ -172,6 +175,7 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
       updateLoadState(LoaderState.loaded);
       return false;
     }
+    _lastSignup = (createdforid, name, mothertongueid, mobilenumber);
     try {
       var res = await serviceConfig.signUp(
         createdforid,
@@ -223,7 +227,20 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
     }
   }
 
-  Future<bool> verifyOtp(String mobilenumber, int otp) async {
+  // Last signup request, so the sign-up OTP screen can resend the code.
+  (int, String, int, String)? _lastSignup;
+
+  /// Re-sends the sign-up OTP by repeating the last signup request.
+  Future<bool> resendSignupOtp() async {
+    final last = _lastSignup;
+    if (last == null) {
+      signupError = 'Could not resend the code';
+      return false;
+    }
+    return signup(last.$1, last.$2, last.$3, last.$4);
+  }
+
+  Future<bool> signupverifyOtp(String mobilenumber, int otp) async {
     updateLoadState(LoaderState.loading);
     final network = await CommonFunctions.checkInternetConnection();
     if (!network) {
@@ -231,11 +248,10 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
       return false;
     }
     try {
-      var res = await serviceConfig.verifyOtp(mobilenumber, otp);
+      var res = await serviceConfig.signupverifyOtp(mobilenumber, otp);
       final result = res.asValue?.value ?? res.asError?.error;
-      if (result is VerifyOtpModel) {
+      if (result is SignUpVerifyOtpModel) {
         verifyOtpModel = result;
-        UserGender.set(result.customer.gender);
         verifyOtpError = null;
       } else if (result is ErrorResponseModel) {
         verifyOtpError = result.errorMessage ?? 'Invalid OTP. Please try again';
@@ -246,6 +262,33 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
     } catch (e) {
       debugPrint('exception in verify otp: $e');
       verifyOtpError = 'Something went wrong';
+      updateLoadState(LoaderState.loaded);
+      return false;
+    }
+  }
+
+    Future<bool> signinverifyOtp(String mobilenumber, int otp) async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if (!network) {
+      updateLoadState(LoaderState.loaded);
+      return false;
+    }
+    try {
+      var res = await serviceConfig.signinverifyOtp(mobilenumber, otp);
+      final result = res.asValue?.value ?? res.asError?.error;
+      if (result is SignInVerifyOtpModel) {
+        signinverifyOtpModel = result;
+        signinverifyOtpError = null;
+      } else if (result is ErrorResponseModel) {
+        signinverifyOtpError = result.errorMessage ?? 'Invalid OTP. Please try again';
+      }
+      updateLoadState(LoaderState.loaded);
+      notifyListeners();
+      return res.isValue;
+    } catch (e) {
+      debugPrint('exception in sign in verify otp: $e');
+      signinverifyOtpError = 'Something went wrong';
       updateLoadState(LoaderState.loaded);
       return false;
     }
@@ -1138,7 +1181,9 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
   }
 
   // Sends a login OTP to an already-registered mobile number.
-  Future<bool> signIn(String mobile) async {
+  // loginType: LoginType.otp (1) sends an OTP, LoginType.password (2) logs in
+  // directly and the token is saved by the service layer.
+  Future<bool> signIn(String mobile, int loginType, {String? password}) async {
     updateLoadState(LoaderState.loading);
     final network = await CommonFunctions.checkInternetConnection();
     if (!network) {
@@ -1146,7 +1191,7 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
       return false;
     }
     try {
-      var res = await serviceConfig.signIn(mobile);
+      var res = await serviceConfig.signIn(mobile, loginType, password: password);
       final result = res.asValue?.value ?? res.asError?.error;
       if (result is SignInModel) {
         signInModel = result;
@@ -1241,8 +1286,9 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
   }
 
   String? chooseSubscriptionError;
+  ChooseSubscriptionModel? chooseSubscriptionModel;
 
-  Future<bool> chooseSubscription(int subscriptionId) async {
+  Future<bool> chooseSubscription(int subscriptionId, String promocode) async {
     updateLoadState(LoaderState.loading);
     final network = await CommonFunctions.checkInternetConnection();
     if (!network) {
@@ -1250,16 +1296,19 @@ class RegisterProvider extends ProviderHelperClass with ChangeNotifier {
       return false;
     }
     try {
-      var res = await serviceConfig.chooseSubscription(subscriptionId);
+      var res = await serviceConfig.chooseSubscription(subscriptionId,promocode);
       final result = res.asValue?.value ?? res.asError?.error;
+      var ok = false;
       if (result is ChooseSubscriptionModel) {
-        chooseSubscriptionError = null;
+        chooseSubscriptionModel = result;
+        ok = result.status;
+        chooseSubscriptionError = ok ? null : result.message;
       } else if (result is ErrorResponseModel) {
         chooseSubscriptionError = result.errorMessage ?? 'Something went wrong';
       }
       updateLoadState(LoaderState.loaded);
       notifyListeners();
-      return res.isValue;
+      return res.isValue && ok;
     } catch (e) {
       debugPrint('exception in chooseSubscription: $e');
       chooseSubscriptionError = 'Something went wrong. Please try again';

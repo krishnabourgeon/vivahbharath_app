@@ -14,13 +14,20 @@ enum MatchTab {
   ),
   viewedByYou('Viewed By You', endpoint: 'matches/viewed-by-me'),
   online('Online', endpoint: 'matches/online'),
-  // No backend endpoint yet for the tabs below (endpoint == null).
-  professionMatches('Profession Matches'),
+  professionMatches('Profession Matches', endpoint: 'matches/profession'),
   // Shown under "More"
-  educationMatches('Education Matches', inMore: true),
-  familyMatches('Family Matches', inMore: true),
-  religiousMatches('Religious Matches', inMore: true),
-  dontShow("Marked as Don't Show", inMore: true);
+  educationMatches(
+    'Education Matches',
+    inMore: true,
+    endpoint: 'matches/education',
+  ),
+  familyMatches('Family Matches', inMore: true, endpoint: 'matches/family'),
+  religiousMatches(
+    'Religious Matches',
+    inMore: true,
+    endpoint: 'matches/religion',
+  ),
+  dontShow("Marked as Don't Show", inMore: true, endpoint: 'matches/hidden');
 
   const MatchTab(this.label, {this.inMore = false, this.endpoint});
   final String label;

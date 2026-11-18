@@ -224,6 +224,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
   }
 
   Future<void> _openMore() async {
+    // So the sheet can show how many members are marked "Don't show".
+    _mp.load(MatchTab.dontShow);
     final picked = await showModalBottomSheet<MatchTab>(
       context: context,
       backgroundColor: Colors.white,
@@ -232,7 +234,11 @@ class _MatchesScreenState extends State<MatchesScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _MoreSheet(current: _tab, hiddenCount: _mp.hiddenCount),
+      // Rebuilds when the hidden list finishes loading.
+      builder: (_) => Consumer<MatchesProvider>(
+        builder: (_, mp, _) =>
+            _MoreSheet(current: _tab, hiddenCount: mp.hiddenCount),
+      ),
     );
     if (picked != null && mounted) _selectTab(picked);
   }
@@ -244,10 +250,12 @@ class _MatchesScreenState extends State<MatchesScreen> {
     final pg = mp.page(_tab);
     final rows = _visible(mp);
     final supported = mp.isSupported(_tab);
-    final firstLoad = supported && !_isDontShow && !pg.loaded;
-    final count = _query.isEmpty && !_isDontShow && pg.total != null
-        ? pg.total!
-        : rows.length;
+    final firstLoad = supported && !pg.loaded && rows.isEmpty;
+    final count = _query.isNotEmpty
+        ? rows.length
+        : _isDontShow
+        ? mp.hiddenCount
+        : pg.total ?? rows.length;
 
     return Scaffold(
       backgroundColor: AppColors.bgBottom,

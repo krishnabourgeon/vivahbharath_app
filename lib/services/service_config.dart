@@ -21,8 +21,11 @@ import 'package:vivahbharath_app/model/curriencies_model.dart';
 import 'package:vivahbharath_app/model/dashboard_model.dart';
 import 'package:vivahbharath_app/model/diets_model.dart';
 import 'package:vivahbharath_app/model/district_model.dart';
+import 'package:vivahbharath_app/model/dont_show_matches_model.dart';
+import 'package:vivahbharath_app/model/education_matches_model.dart';
 import 'package:vivahbharath_app/model/education_model.dart';
 import 'package:vivahbharath_app/model/error_response_model.dart';
+import 'package:vivahbharath_app/model/family_matches_model.dart';
 import 'package:vivahbharath_app/model/family_model.dart';
 import 'package:vivahbharath_app/model/family_statuses.dart';
 import 'package:vivahbharath_app/model/family_type_model.dart';
@@ -47,7 +50,9 @@ import 'package:vivahbharath_app/model/personal_model.dart';
 import 'package:vivahbharath_app/model/photos_model.dart';
 import 'package:vivahbharath_app/model/privacy_settings_body.dart';
 import 'package:vivahbharath_app/model/privacy_settings_model.dart';
+import 'package:vivahbharath_app/model/profession_matches_model.dart';
 import 'package:vivahbharath_app/model/professional_model.dart';
+import 'package:vivahbharath_app/model/religion_match_model.dart';
 import 'package:vivahbharath_app/model/religions_model.dart';
 import 'package:vivahbharath_app/model/request_model.dart';
 import 'package:vivahbharath_app/model/request_send_model.dart';
@@ -58,13 +63,14 @@ import 'package:vivahbharath_app/model/shortlist_model.dart';
 import 'package:vivahbharath_app/model/shortlisted_by_you_model.dart';
 import 'package:vivahbharath_app/model/shortlisted_you_model.dart';
 import 'package:vivahbharath_app/model/sign_in_model.dart';
+import 'package:vivahbharath_app/model/sign_up_verify_otp_model.dart';
+import 'package:vivahbharath_app/model/signin_verify_otp_model.dart';
 import 'package:vivahbharath_app/model/signup_model.dart';
 import 'package:vivahbharath_app/model/skin_type_model.dart';
 import 'package:vivahbharath_app/model/stars_model.dart';
 import 'package:vivahbharath_app/model/states_model.dart';
 import 'package:vivahbharath_app/model/subcaste_model.dart';
 import 'package:vivahbharath_app/model/value_slab_model.dart';
-import 'package:vivahbharath_app/model/verify_otp_model.dart';
 import 'package:vivahbharath_app/model/viewed_by_me_model.dart';
 import 'package:vivahbharath_app/model/viewed_me_model.dart';
 import 'app_exceptions.dart';
@@ -184,10 +190,10 @@ class ServiceConfig {
     }
   }
 
-  Future<Result> verifyOtp(String mobilenumber, int otp) async {
+  Future<Result> signupverifyOtp(String mobilenumber, int otp) async {
     try {
       Result res = await BaseClient.post(
-        'verify-otp',
+        'signup/verify-otp',
         // API expects the number under "mobile" (422 "The mobile field is required" otherwise)
         body: {'mobile': mobilenumber, 'otp': otp},
       );
@@ -200,12 +206,12 @@ class ServiceConfig {
       } else {
         var response = res.asValue!.value;
         debugPrint('verify otp response $response');
-        VerifyOtpModel verifyOtpModel = VerifyOtpModel.fromJson(response);
-        if (verifyOtpModel.token.isNotEmpty) {
-          await SharedPreferenceHelper.saveToken(verifyOtpModel.token);
+        SignUpVerifyOtpModel signupverifyOtpModel = SignUpVerifyOtpModel.fromJson(response);
+        if (signupverifyOtpModel.data.token.isNotEmpty) {
+          await SharedPreferenceHelper.saveToken(signupverifyOtpModel.data.token);
         }
-        return verifyOtpModel.token.isNotEmpty
-            ? Result.value(verifyOtpModel)
+        return signupverifyOtpModel.data.token.isNotEmpty
+            ? Result.value(signupverifyOtpModel)
             : Result.error(
                 ErrorResponseModel(
                   errorMessage: 'Invalid OTP. Please try again',
@@ -224,6 +230,52 @@ class ServiceConfig {
       );
     }
   }
+
+
+
+    Future<Result> signinverifyOtp(String mobilenumber, int otp) async {
+    try {
+      Result res = await BaseClient.post(
+        'verify-otp',
+        // API expects the number under "mobile" (422 "The mobile field is required" otherwise)
+        body: {'mobile': mobilenumber, 'otp': otp},
+      );
+      if (res.isError) {
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+
+        return Result.error(errorResponseModel);
+      } else {
+        var response = res.asValue!.value;
+        debugPrint('Sign in verify otp response $response');
+        SignInVerifyOtpModel signinverifyOtpModel = SignInVerifyOtpModel.fromJson(response);
+        if (signinverifyOtpModel.data.token.isNotEmpty) {
+          await SharedPreferenceHelper.saveToken(signinverifyOtpModel.data.token);
+        }
+        return signinverifyOtpModel.data.token.isNotEmpty
+            ? Result.value(signinverifyOtpModel)
+            : Result.error(
+                ErrorResponseModel(
+                  errorMessage: 'Invalid OTP. Please try again',
+                ),
+              );
+      }
+    } on AppException catch (e) {
+      debugPrint('verify otp validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Invalid OTP. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+
+
 
   Future<Result> getGenders() async {
     Result res = await BaseClient.get('genders');
@@ -1038,11 +1090,18 @@ class ServiceConfig {
     }
   }
 
-  Future<Result> signIn(String mobile) async {
+  /// login_type 1 = OTP (server sends an OTP, verify via `verify-otp`),
+  /// login_type 2 = password (server returns the token directly).
+  Future<Result> signIn(String mobile, int loginType, {String? password}) async {
     try {
       Result res = await BaseClient.post(
         'signin',
-        body: {"mobile_number": mobile},
+        body: {
+          // API expects "mobile" (422 "The mobile field is required" otherwise)
+          "mobile": mobile,
+          "login_type": loginType,
+          if (loginType == LoginType.password) "password": password ?? '',
+        },
       );
       if (res.isError) {
         ErrorResponseModel errorResponseModel = ErrorResponseModel(
@@ -1053,6 +1112,19 @@ class ServiceConfig {
         var response = res.asValue!.value;
         debugPrint('SingIn response $response');
         SignInModel signInModel = SignInModel.fromJson(response);
+        if (signInModel.status == false) {
+          return Result.error(
+            ErrorResponseModel(
+              errorMessage:
+                  signInModel.message ?? 'Login failed. Please try again',
+            ),
+          );
+        }
+        // password login returns the token straight away
+        final token = signInModel.data?.token;
+        if (token != null && token.isNotEmpty) {
+          await SharedPreferenceHelper.saveToken(token);
+        }
         return Result.value(signInModel);
       }
     } on AppException catch (e) {
@@ -1067,6 +1139,9 @@ class ServiceConfig {
       );
     }
   }
+
+
+
 
   // Endpoint name is a guess (no catalog endpoint was ever wired to the
   // pre-existing but unused ImageTypesModel) — confirm against the real API
@@ -1131,17 +1206,18 @@ class ServiceConfig {
       return Result.error(errorResponseModel);
     } else {
       var response = res.asValue!.value;
-      GetSubscriptionModel getSubscription = GetSubscriptionModel.fromJson(
+      SubscriptionModel getSubscription = SubscriptionModel.fromJson(
         response,
       );
       return Result.value(getSubscription);
     }
   }
 
-  Future<Result> chooseSubscription(int subscriptionId) async {
+  Future<Result> chooseSubscription(int subscriptionId, String promocode) async {
     try {
       Result res = await BaseClient.post('subscription/choose', body: {
-        'subscription_id':subscriptionId,
+        'subscription_id': subscriptionId,
+        'promocode': promocode,
       });
       if (res.isError) {
         ErrorResponseModel errorResponseModel = ErrorResponseModel(
@@ -1405,11 +1481,12 @@ class ServiceConfig {
     }
   }
 
+  /// Toggles the shortlist for member [id]: shortlists them if they aren't,
+  /// removes them if they are. Returns a [ShortListModel] with the new state.
   Future<Result> shorlist(int id) async {
-    Result res = await BaseClient.post(
-      'matches/$id/shortlist'
-    );
-    if (res.isError) {
+    final res = await BaseClient.post('matches/$id/shortlist');
+    // BaseClient returns null when there's no internet connection.
+    if (res is! Result || res.isError) {
       ErrorResponseModel errorResponseModel = ErrorResponseModel(
         errorMessage: 'OOps...!, Something went wrong',
       );
@@ -1508,8 +1585,82 @@ class ServiceConfig {
     }
   }
 
-  /// Raw JSON for any `matches/*` list. The endpoints don't share one
-  /// schema, so `MatchesProvider` parses the result leniently.
+
+  Future<Result> professionMatches() async {
+    Result res = await BaseClient.get('matches/profession');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      ProfessionMatchesModel professionMatchesModel = ProfessionMatchesModel.fromJson(response);
+      return Result.value(professionMatchesModel);
+    }
+  }
+
+
+  Future<Result> educationMatches() async {
+    Result res = await BaseClient.get('matches/education');
+    if (res.isError) {
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      EducationMatchesModel educationMatchesModel = EducationMatchesModel.fromJson(response);
+      return Result.value(educationMatchesModel);
+    }
+  }  
+
+  Future<Result> familyMatches() async{
+    Result res = await BaseClient.get('matches/family');
+    if(res.isError){
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    }else{
+      var response = res.asValue!.value;
+      FamilyMatchesModel familyMatchesModel = FamilyMatchesModel.fromJson(response);
+      return Result.value(familyMatchesModel);
+    }
+  }
+
+  Future<Result> religionMatches() async{
+    Result res = await BaseClient.get('matches/religion');
+    if(res.isError){
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    }else{
+      var response = res.asValue!.value;
+      ReligionMatchesModel religionMatchesModel = ReligionMatchesModel.fromJson(response);
+      return Result.value(religionMatchesModel);
+    }
+  }
+
+
+    Future<Result> dontshowMatches() async{
+    Result res = await BaseClient.get('matches/hidden');
+    if(res.isError){
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    }else{
+      var response = res.asValue!.value;
+      DontShowMatchesModel dontshowMatchesModel = DontShowMatchesModel.fromJson(response);
+      return Result.value(dontshowMatchesModel);
+    }
+  }
+
+
+
+
   Future<Result> getMatchList(String path,
       {int offset = 0, int limit = 20}) async {
     final res = await BaseClient.get(path, map: {
@@ -1523,4 +1674,11 @@ class ServiceConfig {
     }
     return Result.value(res.asValue!.value);
   }
+}
+
+/// Values for the `login_type` field of the `signin` API.
+class LoginType {
+  LoginType._();
+  static const int otp = 1;
+  static const int password = 2;
 }
