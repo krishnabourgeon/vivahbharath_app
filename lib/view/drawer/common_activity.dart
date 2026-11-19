@@ -604,6 +604,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
+import 'package:vivahbharath_app/view/custom/profile_badges.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
 import 'package:vivahbharath_app/view/drawer/chat_screen.dart';
 
@@ -622,6 +623,8 @@ class ActivityPerson {
     this.id = 'VB[ID]',
     this.online = false,
     this.premium = false,
+    this.verified = true,
+    this.featured = false,
     this.nameHidden = false,
     this.photoUrl,
   });
@@ -633,7 +636,11 @@ class ActivityPerson {
   final String line2;
   final String line3;
   final bool online;
+
+  /// Paid member — shows the "Paid Member" badge.
   final bool premium;
+  final bool verified;
+  final bool featured;
   final bool nameHidden;
   final String? photoUrl;
 }
@@ -655,6 +662,7 @@ class SamplePeople {
     line3: 'Kozhikode · Kerala · India',
     online: true,
     premium: true,
+    featured: true,
   );
   static final c = ActivityPerson(
     name: '[Name]',
@@ -980,16 +988,21 @@ class ActivityCard extends StatelessWidget {
     final p = person;
     const detail = TextStyle(fontSize: 13, height: 1.4, color: AppColors.navy);
 
-    return Container(
+    final card = Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.white, highlight ? AppColors.cream : Colors.white],
+          colors: p.featured
+              ? [AppColors.loginA, Colors.white]
+              : [Colors.white, highlight ? AppColors.cream : Colors.white],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: highlight ? AppColors.goldBorder : AppColors.blueTintBorder,
+          color: highlight || p.featured
+              ? AppColors.goldBorder
+              : AppColors.blueTintBorder,
+          width: p.featured ? 1.4 : 1,
         ),
         boxShadow: [
           BoxShadow(
@@ -1018,6 +1031,14 @@ class ActivityCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (p.verified || p.premium) ...[
+                            ProfileBadges(
+                              verified: p.verified,
+                              paid: p.premium,
+                              compact: true,
+                            ),
+                            const SizedBox(height: 6),
+                          ],
                           Row(
                             children: [
                               Flexible(
@@ -1032,9 +1053,10 @@ class ActivityCard extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 4),
-                              matchIcon(Icons.verified_rounded, 'verified',
-                                  size: 16, color: AppColors.verified),
+                              if (p.online) ...[
+                                const SizedBox(width: 6),
+                                const OnlineBadge(),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 2),
@@ -1090,6 +1112,8 @@ class ActivityCard extends StatelessWidget {
         ),
       ),
     );
+
+    return withFeaturedRibbon(card, featured: p.featured);
   }
 }
 

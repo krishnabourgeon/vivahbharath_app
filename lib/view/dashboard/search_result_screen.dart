@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vivahbharath_app/provider/matches_provider.dart';
+import 'package:vivahbharath_app/provider/search_provider.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
 import 'profile_detail_screen.dart';
@@ -11,7 +14,7 @@ class SearchResultsScreen extends StatefulWidget {
     super.key,
     required this.criteria,
     this.savedName,
-    this.showBottomNav = true,
+    this.showBottomNav = false,
   });
 
   /// Value this screen pops with when the user picks "New Search".
@@ -32,8 +35,107 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   late String? _savedName = widget.savedName;
   MatchTab _tab = MatchTab.all;
 
-  // TODO: load from your search API using [_c] and [_tab].
-  final List<MatchProfile> _profiles = sampleMatches();
+  final _api = SearchApi();
+  final _scroll = ScrollController();
+  final List<MatchProfile> _profiles = [];
+  bool _loading = false;
+  bool _loadingMore = false;
+  String? _error;
+  int _page = 1;
+  int? _lastPage;
+  int? _total;
+  int _request = 0; // drops responses from superseded searches
+
+  bool get _hasMore =>
+      _c.type != SearchType.profileId &&
+      (_lastPage == null ? _profiles.length >= SearchApi.perPage * _page
+          : _page < _lastPage!);
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scroll.hasClients && _scroll.position.extentAfter < 400) _loadMore();
+  }
+
+  /// (Re)runs the search from page 1.
+  Future<void> _load() async {
+    final req = ++_request;
+    setState(() {
+      _loading = true;
+      _loadingMore = false;
+      _error = null;
+      _profiles.clear();
+      _page = 1;
+      _lastPage = null;
+      _total = null;
+    });
+    try {
+      final r = await _api.run(_c, page: 1);
+      if (!mounted || req != _request) return;
+      setState(() {
+        _profiles.addAll(r.profiles);
+        _total = r.total;
+        _lastPage = r.lastPage;
+      });
+    } on SearchException catch (e) {
+      if (mounted && req == _request) setState(() => _error = e.message);
+    } catch (e) {
+      debugPrint('Search failed: $e');
+      if (mounted && req == _request) {
+        setState(() => _error = 'Could not load search results. Please try again');
+      }
+    } finally {
+      if (mounted && req == _request) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || _error != null || !_hasMore) return;
+    final req = _request;
+    setState(() => _loadingMore = true);
+    try {
+      final r = await _api.run(_c, page: _page + 1);
+      if (!mounted || req != _request) return;
+      final seen = _profiles.map((p) => p.key).toSet();
+      final fresh = r.profiles.where((p) => seen.add(p.key)).toList();
+      setState(() {
+        _page++;
+        _profiles.addAll(fresh);
+        _total = r.total ?? _total;
+        _lastPage = r.lastPage ?? _lastPage;
+        if (fresh.isEmpty) _lastPage = _page; // nothing new: stop paging
+      });
+    } catch (e) {
+      debugPrint('Search load more failed: $e');
+      if (mounted && req == _request) setState(() => _lastPage = _page);
+    } finally {
+      if (mounted && req == _request) setState(() => _loadingMore = false);
+    }
+  }
+
+  Future<void> _toggleShortlist(MatchProfile p) async {
+    final now = await context.read<MatchesProvider>().toggleShortlist(p);
+    if (!mounted) return;
+    setState(() {});
+    _toast(now == null
+        ? 'Could not update your shortlist. Please try again'
+        : now
+            ? 'Added to your shortlist'
+            : 'Removed from your shortlist');
+  }
 
   bool get _isDontShow => _tab == MatchTab.dontShow;
   int get _hiddenCount => _profiles.where((p) => p.hidden).length;
@@ -78,7 +180,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       _savedName = s.name;
       _tab = MatchTab.all;
     });
-    // TODO: reload results for the saved search.
+    _load();
   }
 
   Future<void> _saveSearch() async {
@@ -94,7 +196,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       _c.remove(t);
       _savedName = null; // criteria changed, no longer the saved one
     });
-    // TODO: reload results.
+    _load();
   }
 
   Future<void> _openMore() async {
@@ -157,8 +259,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bgBottom,
-      bottomNavigationBar:
-          widget.showBottomNav ? const AppBottomNav(currentIndex: 2) : null,
+      // No bottom bar here: this screen opens inside the Search tab of
+      // DashboardShell, which already shows the app's bottom bar.
       body: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -204,7 +306,12 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               const SizedBox(height: 6),
 
               Expanded(
-                child: ListView(
+                child: RefreshIndicator(
+                 color: AppColors.tealMid,
+                 onRefresh: _load,
+                 child: ListView(
+                  controller: _scroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   children: [
                     if (!_isDontShow) ...[
@@ -220,7 +327,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                     Text(
                       _isDontShow
                           ? "Marked As Don't show · ${rows.length}"
-                          : '${rows.length} profiles found',
+                          : _loading
+                              ? 'Searching…'
+                              : '${_total ?? rows.length} ${(_total ?? rows.length) == 1 ? 'profile' : 'profiles'} found',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -232,28 +341,61 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                       const DontShowInfo(),
                       const SizedBox(height: 14),
                     ],
-                    if (rows.isEmpty)
+                    if (_loading)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.tealMid),
+                        ),
+                      )
+                    else if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 48),
+                        child: Column(
+                          children: [
+                            Text(
+                              _error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 14, color: AppColors.textMuted),
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton.icon(
+                              onPressed: _load,
+                              icon: const Icon(Icons.refresh_rounded,
+                                  color: AppColors.tealMid),
+                              label: const Text(
+                                'Try again',
+                                style: TextStyle(
+                                  color: AppColors.tealMid,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (rows.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 48),
                         child: Text(
-                          'No profiles match these filters.',
+                          _c.type == SearchType.profileId
+                              ? 'No profile found with ID ${_c.values['profileId'] ?? ''}.'
+                              : 'No profiles match these filters.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                               fontSize: 14, color: AppColors.textMuted),
                         ),
                       ),
-                    for (final p in rows) ...[
+                    for (final p in _loading ? const <MatchProfile>[] : rows) ...[
                       MatchCard(
                         profile: p,
                         dontShowMode: _isDontShow,
-                        onShortlist: () {
-                          setState(() => p.shortlisted = !p.shortlisted);
-                          _toast(p.shortlisted
-                              ? 'Added to your shortlist'
-                              : 'Removed from your shortlist');
-                        },
+                        onShortlist: () => _toggleShortlist(p),
                         onInterest: () {
-                          setState(() => p.status = InterestStatus.awaiting);
+                          context.read<MatchesProvider>().markInterestSent(p);
+                          setState(() {});
                           _toast('Interest sent to ${p.name}');
                         },
                         onHide: () {
@@ -273,7 +415,20 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                       ),
                       const SizedBox(height: 18),
                     ],
+                    if (_loadingMore)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.4, color: AppColors.tealMid),
+                          ),
+                        ),
+                      ),
                   ],
+                 ),
                 ),
               ),
             ],

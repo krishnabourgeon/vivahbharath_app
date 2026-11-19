@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
+import 'package:vivahbharath_app/view/custom/profile_badges.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
 import 'package:vivahbharath_app/view/dashboard/search_screen.dart';
 
@@ -52,6 +53,8 @@ class InboxPerson {
     this.id = 'VB[ID]',
     this.nameHidden = false,
     this.featured = false,
+    this.verified = true,
+    this.paid = false,
     this.photoRequested = false,
     this.online = false,
     this.shortlisted = false,
@@ -66,6 +69,8 @@ class InboxPerson {
   final String line3; // Kozhikode · Kerala · India
   final bool nameHidden;
   final bool featured;
+  final bool verified;
+  final bool paid;
   final bool photoRequested;
   final bool online;
   final String? photoUrl;
@@ -169,6 +174,7 @@ class InboxData {
       name: 'Raxxxxxxxx',
       nameHidden: true,
       featured: true,
+      paid: true,
       photoRequested: true,
       lastSeen: 'Last seen 5 hours ago',
       line1: '36 Yrs · 5\'8" · Hindu · Nair',
@@ -1289,30 +1295,7 @@ class _InboxCard extends StatelessWidget {
     final featured = p.featured;
 
     final card = Container(
-      margin: EdgeInsets.only(top: featured ? 10 : 0),
-      decoration: BoxDecoration(
-        color: featured ? null : Colors.white,
-        gradient: featured
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [AppColors.loginA, Colors.white],
-                stops: [0, 0.45],
-              )
-            : null,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: featured ? AppColors.goldBorder : AppColors.blueTintBorder,
-          width: featured ? 1.4 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.tealDark.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: profileCardDecoration(featured: featured),
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
@@ -1349,41 +1332,7 @@ class _InboxCard extends StatelessWidget {
       ),
     );
 
-    if (!featured) return card;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        card,
-        Positioned(
-          top: 0,
-          left: 14,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(8, 3, 10, 3),
-            decoration: BoxDecoration(
-              color: AppColors.goldSoft,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppColors.goldBorder),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                matchIcon(Icons.workspace_premium_rounded, 'crown',
-                    size: 13, color: AppColors.goldDark),
-                const SizedBox(width: 4),
-                const Text(
-                  'Featured profile',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.goldDark,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+    return withFeaturedRibbon(card, featured: featured);
   }
 
   Widget _details(InboxPerson p) {
@@ -1392,6 +1341,10 @@ class _InboxCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (p.verified || p.paid) ...[
+          ProfileBadges(verified: p.verified, paid: p.paid, compact: true),
+          const SizedBox(height: 6),
+        ],
         Row(
           children: [
             Flexible(
@@ -1406,12 +1359,6 @@ class _InboxCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 4),
-            Semantics(
-              label: 'Verified',
-              child: matchIcon(Icons.verified_rounded, 'verified',
-                  size: 16, color: AppColors.verified),
-            ),
             if (p.nameHidden) ...[
               const SizedBox(width: 4),
               Semantics(
@@ -1419,6 +1366,10 @@ class _InboxCard extends StatelessWidget {
                 child: matchIcon(Icons.visibility_off_outlined, 'eye_off',
                     size: 15, color: AppColors.coral),
               ),
+            ],
+            if (p.online) ...[
+              const SizedBox(width: 6),
+              const OnlineBadge(),
             ],
           ],
         ),

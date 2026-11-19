@@ -220,6 +220,8 @@ class SearchCriteria {
     }
     final kw = values['keyword'];
     if (kw != null) out.add(CriteriaTag('Keywords', kw, ['keyword']));
+    final pid = values['profileId'];
+    if (pid != null) out.add(CriteriaTag('Profile ID', pid, ['profileId']));
     // for (final t in kQuickToggles) {
     //   if (toggles.contains(t.$1)) out.add(CriteriaTag(t.$2, 'Yes', [t.$1]));
     // }
@@ -321,11 +323,11 @@ class SearchScreen extends StatefulWidget {
   const SearchScreen({
     super.key,
     this.initialType = SearchType.basic,
-    this.showBottomNav = true,
+    //this.showBottomNav = true,
   });
 
   final SearchType initialType;
-  final bool showBottomNav;
+  //final bool showBottomNav;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -462,6 +464,17 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() => _type = SearchType.basic);
       _reset();
     }
+  }
+
+  void _searchProfileId() {
+    final id = _idCtrl.text.trim().toUpperCase();
+    if (id.isEmpty) {
+      _snack('Enter a profile ID');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    _showResults(SearchCriteria(
+        values: {'profileId': id}, type: SearchType.profileId));
   }
 
   void _snack(String msg) {
@@ -843,6 +856,8 @@ class _SearchScreenState extends State<SearchScreen> {
               TextField(
                 controller: _idCtrl,
                 textCapitalization: TextCapitalization.characters,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _searchProfileId(),
                 decoration: searchInputDecoration('e.g. VBM26532747M'),
               ),
               const SizedBox(height: 8),
@@ -857,13 +872,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     size: 18, color: Colors.white),
                 foreground: Colors.white,
                 gradient: kTealGradient,
-                onTap: () {
-                  if (_idCtrl.text.trim().isEmpty) {
-                    _snack('Enter a profile ID');
-                    return;
-                  }
-                  // TODO: open profile by ID
-                },
+                onTap: _searchProfileId,
               ),
             ],
           ),

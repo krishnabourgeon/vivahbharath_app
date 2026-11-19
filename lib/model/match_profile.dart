@@ -53,6 +53,8 @@ class MatchProfile {
     this.nameHidden = false,
     this.verified = true,
     this.featured = false,
+    this.paid = false,
+    this.online = false,
     this.shortlisted = false,
     this.photoRequested = false,
     this.status = InterestStatus.send,
@@ -76,6 +78,12 @@ class MatchProfile {
   final bool nameHidden;
   final bool verified;
   final bool featured;
+
+  /// Member is on a paid plan ("Paid Member" badge).
+  final bool paid;
+
+  /// Member is online right now ("Online" badge).
+  final bool online;
 
   // Mutable UI state
   bool shortlisted;
@@ -108,6 +116,7 @@ class MatchProfile {
           (apiId == null ? '' : 'VB$apiId'),
       name: _str(j['name']) ?? 'Member',
       nameHidden: _bool(j['name_hidden']) ?? false,
+      online: online,
       lastSeen: online ? 'Online now' : _lastSeen(j['last_seen']),
       age: _int(j['age']),
       height: _str(j['height']) ?? '',
@@ -123,6 +132,12 @@ class MatchProfile {
       photoUrl: _photo(j['image_url'] ?? j['profile_photo'] ?? j['photo']),
       verified: _bool(j['is_verified']) ?? _bool(j['verified']) ?? false,
       featured: _bool(j['is_featured']) ?? _bool(j['featured']) ?? false,
+      paid:
+          _bool(j['is_paid_member']) ??
+          _bool(j['is_paid']) ??
+          _bool(j['is_premium']) ??
+          _bool(j['premium']) ??
+          false,
       shortlisted: _bool(j['is_shortlisted']) ?? shortlisted,
       hidden: _bool(j['is_hidden']) ?? false,
       status: connected

@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:vivahbharath_app/function.dart';
 import 'package:vivahbharath_app/model/match_profile.dart';
 import 'package:vivahbharath_app/provider/matches_provider.dart';
+import 'package:vivahbharath_app/provider/search_provider.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
+import 'package:vivahbharath_app/view/custom/profile_badges.dart';
 import 'profile_detail_screen.dart';
 
 export 'package:vivahbharath_app/model/match_profile.dart';
@@ -35,6 +37,8 @@ List<MatchProfile> sampleMatches() => [
     profession: 'Software Engineer',
     city: 'Kozhikode',
     featured: true,
+    paid: true,
+    online: true,
     shortlisted: true,
     photoRequested: true,
     status: InterestStatus.awaiting,
@@ -131,18 +135,65 @@ class _MatchesScreenState extends State<MatchesScreen> {
 
   bool get _isDontShow => _tab == MatchTab.dontShow;
 
-  /// Current tab's rows, narrowed by the search box (name or profile ID).
+  // Profile ID search (`search/profile/{id}`) for the search box.
+  final _searchApi = SearchApi();
+  List<MatchProfile> _idResults = const [];
+  bool _idLoading = false;
+  int _idRequest = 0;
+
+  /// Profile IDs always contain digits (e.g. VBM26532747M); names don't.
+  static bool _looksLikeId(String q) => RegExp(r'\d').hasMatch(q);
+
+  /// Current tab's rows, narrowed by the search box (name or profile ID),
+  /// plus any member found by the profile ID search.
   List<MatchProfile> _visible(MatchesProvider mp) {
     final rows = mp.visible(_tab);
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return rows;
-    return rows
+    final local = rows
         .where(
           (p) =>
               p.name.toLowerCase().contains(q) ||
               p.id.toLowerCase().contains(q),
         )
-        .toList(growable: false);
+        .toList();
+    final seen = local.map((p) => p.key).toSet();
+    return [
+      ...local,
+      for (final p in _idResults)
+        if (seen.add(p.key)) p,
+    ];
+  }
+
+  /// Runs the search box: filters the loaded list and, for an ID, asks the
+  /// API for that member so profiles outside this tab are found too.
+  Future<void> _runSearch() async {
+    FocusScope.of(context).unfocus();
+    final q = _searchCtrl.text.trim();
+    final req = ++_idRequest;
+    setState(() {
+      _query = q;
+      _idResults = const [];
+      _idLoading = q.isNotEmpty && _looksLikeId(q);
+    });
+    if (!_idLoading) return;
+    try {
+      final found = await _searchApi.byProfileId(q);
+      if (mounted && req == _idRequest) setState(() => _idResults = found);
+    } catch (e) {
+      debugPrint('Profile ID search "$q": $e'); // shown as "no match"
+    } finally {
+      if (mounted && req == _idRequest) setState(() => _idLoading = false);
+    }
+  }
+
+  void _clearSearch() {
+    _idRequest++;
+    setState(() {
+      _query = '';
+      _idResults = const [];
+      _idLoading = false;
+    });
   }
 
   @override
@@ -276,12 +327,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
               const _Header(),
               _SearchRow(
                 controller: _searchCtrl,
-                onSearch: () {
-                  FocusScope.of(context).unfocus();
-                  setState(() => _query = _searchCtrl.text);
-                },
+                onSearch: _runSearch,
                 onChanged: (v) {
-                  if (v.isEmpty) setState(() => _query = '');
+                  if (v.isEmpty) _clearSearch();
                 },
                 onSavedSearch: () {
                   /* TODO: new / saved search */
@@ -334,7 +382,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                       ],
                       if (!supported)
                         const _ListMessage('These matches are coming soon.')
-                      else if (pg.loading && rows.isEmpty)
+                      else if ((pg.loading || _idLoading) && rows.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 48),
                           child: Center(
@@ -734,30 +782,7 @@ class MatchCard extends StatelessWidget {
     final featured = p.featured && !dontShowMode;
 
     final card = Container(
-      margin: EdgeInsets.only(top: featured ? 10 : 0),
-      decoration: BoxDecoration(
-        color: featured ? null : Colors.white,
-        gradient: featured
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [AppColors.loginA, Colors.white],
-                stops: [0, 0.45],
-              )
-            : null,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: featured ? AppColors.goldBorder : AppColors.blueTintBorder,
-          width: featured ? 1.4 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.tealDark.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: profileCardDecoration(featured: featured),
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
@@ -828,15 +853,7 @@ class MatchCard extends StatelessWidget {
       ),
     );
 
-    if (!featured) return card;
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        card,
-        const Positioned(top: 0, left: 14, child: _FeaturedRibbon()),
-      ],
-    );
+    return withFeaturedRibbon(card, featured: featured);
   }
 
   Widget _statusButton(MatchProfile p) {
@@ -904,42 +921,6 @@ const kTealGradient = LinearGradient(
   end: Alignment.bottomRight,
   colors: [AppColors.tealA, AppColors.tealC],
 );
-
-class _FeaturedRibbon extends StatelessWidget {
-  const _FeaturedRibbon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 3, 10, 3),
-      decoration: BoxDecoration(
-        color: AppColors.goldSoft,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.goldBorder),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          matchIcon(
-            Icons.workspace_premium_rounded,
-            'crown',
-            size: 13,
-            color: AppColors.goldDark,
-          ),
-          const SizedBox(width: 4),
-          const Text(
-            'Featured profile',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.goldDark,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _Photo extends StatelessWidget {
   const _Photo({required this.profile, required this.onShortlist});
@@ -1078,8 +1059,10 @@ class _Info extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (p.verified) const _VerifiedPill(),
-        const SizedBox(height: 6),
+        if (p.verified || p.paid) ...[
+          ProfileBadges(verified: p.verified, paid: p.paid),
+          const SizedBox(height: 6),
+        ],
         Row(
           children: [
             Flexible(
@@ -1105,6 +1088,10 @@ class _Info extends StatelessWidget {
                   color: AppColors.coral,
                 ),
               ),
+            ],
+            if (p.online) ...[
+              const SizedBox(width: 6),
+              const OnlineBadge(),
             ],
           ],
         ),
@@ -1177,41 +1164,6 @@ class _Info extends StatelessWidget {
 /// Joins the non-empty parts with " · ".
 String _join(List<String> parts) =>
     parts.where((s) => s.trim().isNotEmpty).join(' · ');
-
-class _VerifiedPill extends StatelessWidget {
-  const _VerifiedPill();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(4, 3, 8, 3),
-      decoration: BoxDecoration(
-        color: AppColors.verified.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          matchIcon(
-            Icons.verified_rounded,
-            'verified',
-            size: 14,
-            color: AppColors.verified,
-          ),
-          const SizedBox(width: 4),
-          const Text(
-            'Verified',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.verified,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class DontShowInfo extends StatelessWidget {
   const DontShowInfo({super.key});

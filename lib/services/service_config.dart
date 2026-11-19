@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:async/async.dart';
+import 'package:vivahbharath_app/model/advanced_search_body.dart';
+import 'package:vivahbharath_app/model/advanced_serach_model.dart';
 import 'package:vivahbharath_app/model/all_matches_model.dart';
 import 'package:vivahbharath_app/model/basic_info_model.dart';
 import 'package:vivahbharath_app/model/basic_search_body.dart';
@@ -46,12 +48,14 @@ import 'package:vivahbharath_app/model/marital_statuses_model.dart';
 import 'package:vivahbharath_app/model/mother_tongue.dart';
 import 'package:vivahbharath_app/model/new_matches_model.dart';
 import 'package:vivahbharath_app/model/occupations_model.dart';
+import 'package:vivahbharath_app/model/online_matches_model.dart';
 import 'package:vivahbharath_app/model/personal_model.dart';
 import 'package:vivahbharath_app/model/photos_model.dart';
 import 'package:vivahbharath_app/model/privacy_settings_body.dart';
 import 'package:vivahbharath_app/model/privacy_settings_model.dart';
 import 'package:vivahbharath_app/model/profession_matches_model.dart';
 import 'package:vivahbharath_app/model/professional_model.dart';
+import 'package:vivahbharath_app/model/profile_id_search_model.dart';
 import 'package:vivahbharath_app/model/religion_match_model.dart';
 import 'package:vivahbharath_app/model/religions_model.dart';
 import 'package:vivahbharath_app/model/request_model.dart';
@@ -1269,6 +1273,60 @@ class ServiceConfig {
     }
   }
 
+
+  Future<Result> advancedSearch(AdvancedSearchBody body) async {
+    try{
+      Result res = await BaseClient.post('search/advanced',body: body.toJson());
+      if(res.isError){
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      }else{
+        var response = res.asValue!.value;
+        AdvancedSearchModel advancedSearchModel = AdvancedSearchModel.fromJson(response);
+        return Result.value(advancedSearchModel);
+      }
+    }on AppException catch(e){
+      debugPrint('advancedSearch validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+
+ 
+  Future<Result> profileidSearch( ) async {
+    try{
+      Result res = await BaseClient.get('search/profile/VBM26339257M');
+      if(res.isError){
+        ErrorResponseModel errorResponseModel = ErrorResponseModel(
+          errorMessage: 'OOps...!, Something went wrong',
+        );
+        return Result.error(errorResponseModel);
+      }else{
+        var response = res.asValue!.value;
+        ProfileIdSearchModel profileIdSearchModel = ProfileIdSearchModel.fromJson(response);
+        return Result.value(profileIdSearchModel);
+      }
+    }on AppException catch(e){
+      debugPrint('profileidSearch validation error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(
+            e.message,
+            fallback: 'Something went wrong. Please try again',
+          ),
+        ),
+      );
+    }
+  }
+ 
   Future<Result> getDashboard() async {
     Result res = await BaseClient.get('home');
     if (res.isError) {
@@ -1580,8 +1638,8 @@ class ServiceConfig {
       return Result.error(errorResponseModel);
     } else {
       var response = res.asValue!.value;
-      ContactsViewedYouModel contactsViewedYouModel = ContactsViewedYouModel.fromJson(response);
-      return Result.value(contactsViewedYouModel);
+      OnlineMatchesModel onlineMatchesModel = OnlineMatchesModel.fromJson(response);
+      return Result.value(onlineMatchesModel);
     }
   }
 
@@ -1644,7 +1702,7 @@ class ServiceConfig {
   }
 
 
-    Future<Result> dontshowMatches() async{
+  Future<Result> dontshowMatches() async {
     Result res = await BaseClient.get('matches/hidden');
     if(res.isError){
       ErrorResponseModel errorResponseModel = ErrorResponseModel(
@@ -1657,8 +1715,6 @@ class ServiceConfig {
       return Result.value(dontshowMatchesModel);
     }
   }
-
-
 
 
   Future<Result> getMatchList(String path,

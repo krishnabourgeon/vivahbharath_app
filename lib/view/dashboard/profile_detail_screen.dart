@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
+import 'package:vivahbharath_app/view/custom/profile_badges.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
 import 'package:vivahbharath_app/view/drawer/chat_screen.dart';
 import 'package:vivahbharath_app/view/drawer/subscription_screen.dart';
@@ -53,6 +54,7 @@ class MemberProfile {
     this.online = false,
     this.verified = true,
     this.premium = false,
+    this.featured = false,
     this.nameHidden = false,
     this.photoHidden = false,
     this.photoCount = 4,
@@ -69,7 +71,9 @@ class MemberProfile {
   final bool female;
   final bool online;
   final bool verified;
+  /// Paid member — shows the "Paid Member" badge.
   final bool premium;
+  final bool featured;
   final bool nameHidden;
   final bool photoHidden;
   final int photoCount;
@@ -102,6 +106,9 @@ MemberProfile sampleMember() {
     name: '[Name]',
     id: 'VB[Profile ID]',
     lastSeen: 'Last seen 55 minutes ago',
+    premium: true,
+    featured: true,
+    online: true,
     chips: const ['33 yrs', 'Hindu', 'Bachelors Degree', 'Software Engineer', 'Kerala', 'India'],
     about:
         '[A few lines the member writes about herself, her family and what she is looking for.]',
@@ -455,7 +462,10 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               ),
               Padding(
                 padding: EdgeInsets.fromLTRB(14, 380 + top, 14, 0),
-                child: _InfoCard(profile: _p),
+                child: withFeaturedRibbon(
+                  _InfoCard(profile: _p),
+                  featured: _p.featured,
+                ),
               ),
             ],
           ),
@@ -951,9 +961,20 @@ class _InfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: p.featured ? null : Colors.white,
+        gradient: p.featured
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [AppColors.loginA, Colors.white],
+                stops: [0, 0.45],
+              )
+            : null,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.blueTintBorder),
+        border: Border.all(
+          color: p.featured ? AppColors.goldBorder : AppColors.blueTintBorder,
+          width: p.featured ? 1.4 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: AppColors.tealDark.withValues(alpha: 0.1),
@@ -965,6 +986,10 @@ class _InfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (p.verified || p.premium) ...[
+            ProfileBadges(verified: p.verified, paid: p.premium),
+            const SizedBox(height: 8),
+          ],
           Row(
             children: [
               Flexible(
@@ -979,14 +1004,6 @@ class _InfoCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (p.verified) ...[
-                const SizedBox(width: 6),
-                Semantics(
-                  label: 'Verified',
-                  child: matchIcon(Icons.verified_rounded, 'verified',
-                      size: 20, color: AppColors.verified),
-                ),
-              ],
               if (p.nameHidden) ...[
                 const SizedBox(width: 6),
                 Semantics(
@@ -994,6 +1011,10 @@ class _InfoCard extends StatelessWidget {
                   child: matchIcon(Icons.visibility_off_outlined, 'eye_off',
                       size: 18, color: AppColors.coral),
                 ),
+              ],
+              if (p.online) ...[
+                const SizedBox(width: 8),
+                const OnlineBadge(),
               ],
             ],
           ),
