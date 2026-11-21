@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:vivahbharath_app/model/dont_show_model.dart';
 import 'package:vivahbharath_app/model/error_response_model.dart';
 import 'package:vivahbharath_app/model/match_profile.dart';
 import 'package:vivahbharath_app/model/shortlist_model.dart';
+import 'package:vivahbharath_app/model/view_request.dart';
 import 'package:vivahbharath_app/services/service_config.dart';
 
 /// One tab's list plus its paging / loading state.
@@ -29,8 +31,8 @@ class MatchesProvider extends ChangeNotifier {
   final Map<MatchTab, MatchPage> _pages = {};
 
   // "Don't show": the list comes from `matches/hidden` (the dontShow page).
-  // Hiding / unhiding is only kept for this session on top of that list.
-  // TODO: call the hide / unhide endpoints once the backend exposes them.
+  // Hiding / unhiding calls `profiles/{id}/dont-show` (see [setHidden]) and
+  // is layered on top of that list until it's next reloaded.
 
   /// Members hidden during this session, by [MatchProfile.key].
   final Map<String, MatchProfile> _hidden = {};
@@ -128,6 +130,23 @@ class MatchesProvider extends ChangeNotifier {
       pg.hasMore = false; // stop retrying on scroll; pull to refresh retries
     }
     notifyListeners();
+  }
+
+  /// Loads every page of [tab] (up to [maxPages]), e.g. to narrow search
+  /// results down to the members in that tab.
+  Future<void> loadAll(
+    MatchTab tab, {
+    bool refresh = false,
+    int maxPages = 25,
+  }) async {
+    await load(tab, refresh: refresh);
+    for (var i = 1; i < maxPages; i++) {
+      final pg = page(tab);
+      if (!pg.loaded || !pg.hasMore || pg.error != null) break;
+      final before = pg.items.length;
+      await loadMore(tab);
+      if (page(tab).items.length == before) break;
+    }
   }
 
   /// Returns (profiles, total) or null on failure (error stored on the page).
@@ -246,13 +265,140 @@ class MatchesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void hide(MatchProfile p) {
+  // ── Privacy requests ──────────────────────────────────────────────────────
+  final Set<String> _requestBusy = {};
+
+  /// True while a [type] request to member [p] is in flight.
+  bool isRequesting(MatchProfile p, ViewRequestType type) =>
+      _requestBusy.contains('${p.key}:${type.apiValue}');
+
+  /// Sends a view request for a locked [type] of [p] (`POST requests/send`)
+  /// and marks it pending on every loaded copy of the member.
+  ///
+  /// Returns null on success, or an error message to show.
+  Future<String?> sendViewRequest(MatchProfile p, ViewRequestType type) async {
+    final id = p.apiId;
+    if (id == null) return 'This profile cannot be requested right now';
+    final busyKey = '${p.key}:${type.apiValue}';
+    if (!_requestBusy.add(busyKey)) return null;
+    notifyListeners();
+    try {
+      final error = await sendViewRequestTo(id, type);
+      if (error == null) _markRequested(p, type);
+      return error;
+    } finally {
+      _requestBusy.remove(busyKey);
+      notifyListeners();
+    }
+  }
+
+  /// Sends a view request to member [receiverId] without touching any list.
+  /// Returns null on success, or an error message to show.
+  Future<String?> sendViewRequestTo(int receiverId, ViewRequestType type) async {
+    try {
+      final res = await _service.sendRequest(type.apiValue, receiverId);
+      if (res.isValue) return null;
+      final err = res.asError?.error;
+      return err is ErrorResponseModel
+          ? (err.errorMessage ?? 'Could not send your request')
+          : 'Could not send your request';
+    } catch (e) {
+      debugPrint('MatchesProvider: request ${type.apiValue} $receiverId failed: $e');
+      return 'Could not send your request. Please try again';
+    }
+  }
+
+  /// Marks [type] as requested on [p] and on the same member in every tab.
+  void markRequested(MatchProfile p, ViewRequestType type) {
+    _markRequested(p, type);
+    notifyListeners();
+  }
+
+  void _markRequested(MatchProfile p, ViewRequestType type) {
+    p.requested.add(type);
+    for (final pg in _pages.values) {
+      for (final q in pg.items) {
+        if (q.key == p.key) q.requested.add(type);
+      }
+    }
+  }
+
+  // ── Don't show ────────────────────────────────────────────────────────────
+  final Set<String> _hideBusy = {};
+
+  /// True while a "Don't show" change for [p] is in flight.
+  bool isHiding(MatchProfile p) => _hideBusy.contains(p.key);
+
+  /// Hides (`hide: true`) or unhides [p] via `POST profiles/{id}/dont-show`.
+  /// The UI updates immediately and reverts if the call fails.
+  ///
+  /// Returns null on success, or an error message to show.
+  Future<String?> setHidden(MatchProfile p, {required bool hide}) async {
+    final id = p.apiId;
+    if (id == null) return 'This profile cannot be updated right now';
+    if (isHidden(p) == hide) return null;
+    // A second request while one is in flight would toggle the state back.
+    if (!_hideBusy.add(p.key)) return null;
+    hide ? _hideLocal(p) : _unhideLocal(p);
+
+    String? error;
+    try {
+      error = await _toggleDontShow(id, hide: hide);
+    } finally {
+      _hideBusy.remove(p.key);
+    }
+    if (error != null) {
+      hide ? _unhideLocal(p) : _hideLocal(p);
+    } else {
+      notifyListeners();
+    }
+    return error;
+  }
+
+  /// Marks member [id] as "Don't show" without touching any loaded list
+  /// (e.g. from a profile opened outside the Matches screen).
+  /// Returns null on success, or an error message to show.
+  Future<String?> dontShowMember(int id) async {
+    final error = await _toggleDontShow(id, hide: true);
+    // The hidden list changed on the server; reload it when next shown.
+    if (error == null) {
+      _invalidate(MatchTab.dontShow);
+      notifyListeners();
+    }
+    return error;
+  }
+
+  /// The endpoint toggles. If the server reports the opposite of [hide]
+  /// (our copy was stale), call it once more to land on [hide].
+  Future<String?> _toggleDontShow(int id, {required bool hide}) async {
+    try {
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final res = await _service.dontShow('$id');
+        if (res.isError) {
+          final err = res.asError!.error;
+          return err is ErrorResponseModel
+              ? (err.errorMessage ?? 'Could not update this profile')
+              : 'Could not update this profile';
+        }
+        final value = res.asValue!.value;
+        final nowHidden =
+            value is DontShowModel ? value.data?.isHidden : null;
+        if (nowHidden == null || nowHidden == hide) return null;
+      }
+      return 'Could not update this profile. Please try again';
+    } catch (e) {
+      debugPrint('MatchesProvider: dont-show $id failed: $e');
+      return 'Could not update this profile. Please try again';
+    }
+  }
+
+  void _hideLocal(MatchProfile p) {
     _unhidden.remove(p.key);
     _hidden[p.key] = p;
     notifyListeners();
   }
 
-  void unhide(MatchProfile p) {
+  void _unhideLocal(MatchProfile p) {
     _hidden.remove(p.key);
     p.hidden = false;
     for (final pg in _pages.values) {

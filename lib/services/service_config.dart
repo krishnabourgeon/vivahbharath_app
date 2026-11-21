@@ -21,9 +21,11 @@ import 'package:vivahbharath_app/model/countries_model.dart';
 import 'package:vivahbharath_app/model/created_for_model.dart';
 import 'package:vivahbharath_app/model/curriencies_model.dart';
 import 'package:vivahbharath_app/model/dashboard_model.dart';
+import 'package:vivahbharath_app/model/delete_withdraw_model.dart';
 import 'package:vivahbharath_app/model/diets_model.dart';
 import 'package:vivahbharath_app/model/district_model.dart';
 import 'package:vivahbharath_app/model/dont_show_matches_model.dart';
+import 'package:vivahbharath_app/model/dont_show_model.dart';
 import 'package:vivahbharath_app/model/education_matches_model.dart';
 import 'package:vivahbharath_app/model/education_model.dart';
 import 'package:vivahbharath_app/model/error_response_model.dart';
@@ -39,10 +41,11 @@ import 'package:vivahbharath_app/model/hobbies_model.dart';
 import 'package:vivahbharath_app/model/hobby_info_model.dart';
 import 'package:vivahbharath_app/model/horoscope_model.dart';
 import 'package:vivahbharath_app/model/image_types_model.dart';
+import 'package:vivahbharath_app/model/inbox_interest_model.dart';
 import 'package:vivahbharath_app/model/income_model.dart';
-import 'package:vivahbharath_app/model/interest_received_all.dart';
-import 'package:vivahbharath_app/model/interest_recevied_model.dart';
-import 'package:vivahbharath_app/model/interest_send_model.dart';
+// import 'package:vivahbharath_app/model/interest_received_all.dart';
+// import 'package:vivahbharath_app/model/interest_recevied_model.dart';
+//import 'package:vivahbharath_app/model/interest_send_model.dart';
 import 'package:vivahbharath_app/model/job_industries_model.dart';
 import 'package:vivahbharath_app/model/marital_statuses_model.dart';
 import 'package:vivahbharath_app/model/mother_tongue.dart';
@@ -59,10 +62,11 @@ import 'package:vivahbharath_app/model/profile_id_search_model.dart';
 import 'package:vivahbharath_app/model/religion_match_model.dart';
 import 'package:vivahbharath_app/model/religions_model.dart';
 import 'package:vivahbharath_app/model/request_model.dart';
-import 'package:vivahbharath_app/model/request_send_model.dart';
 import 'package:vivahbharath_app/model/residiential_model.dart';
 import 'package:vivahbharath_app/model/respond_interest_model.dart';
 import 'package:vivahbharath_app/model/respond_request_model.dart';
+import 'package:vivahbharath_app/model/send_interest_model.dart';
+import 'package:vivahbharath_app/model/send_request_model.dart';
 import 'package:vivahbharath_app/model/shortlist_model.dart';
 import 'package:vivahbharath_app/model/shortlisted_by_you_model.dart';
 import 'package:vivahbharath_app/model/shortlisted_you_model.dart';
@@ -77,6 +81,7 @@ import 'package:vivahbharath_app/model/subcaste_model.dart';
 import 'package:vivahbharath_app/model/value_slab_model.dart';
 import 'package:vivahbharath_app/model/viewed_by_me_model.dart';
 import 'package:vivahbharath_app/model/viewed_me_model.dart';
+import 'package:vivahbharath_app/model/withdraw_model.dart';
 import 'app_exceptions.dart';
 import 'base_client.dart';
 import 'shared_preference_helper.dart';
@@ -1383,7 +1388,7 @@ class ServiceConfig {
     }
   }
 
-  Future<Result> getViewedMe() async {
+  Future<Result> getViewedMeMatches() async {
     Result res = await BaseClient.get('matches/viewed-me');
     if (res.isError) {
       ErrorResponseModel errorResponseModel = ErrorResponseModel(
@@ -1392,7 +1397,7 @@ class ServiceConfig {
       return Result.error(errorResponseModel);
     } else {
       var response = res.asValue!.value;
-      ViewedMeModel viewedMeModel = ViewedMeModel.fromJson(response);
+      ViewedMeMatchesModel viewedMeModel = ViewedMeMatchesModel.fromJson(response);
       return Result.value(viewedMeModel);
     }
   }
@@ -1412,7 +1417,7 @@ class ServiceConfig {
   }
 
 
-  Future<Result> getShortlistedByYou() async {
+  Future<Result> getShortlistedByYouMatches() async {
     Result res = await BaseClient.get('matches/shortlisted-by-you');
     if (res.isError) {
       ErrorResponseModel errorResponseModel = ErrorResponseModel(
@@ -1421,12 +1426,12 @@ class ServiceConfig {
       return Result.error(errorResponseModel);
     } else {
       var response = res.asValue!.value;
-      ShortlistedByYouModel shortlistedByYouModel = ShortlistedByYouModel.fromJson(response);
+      ShortlistedByYouMatchesModel shortlistedByYouModel = ShortlistedByYouMatchesModel.fromJson(response);
       return Result.value(shortlistedByYouModel);
     }
   }
 
-  Future<Result> getShortlistedYou() async {
+  Future<Result> getShortlistedYouMatches() async {
     Result res = await BaseClient.get('matches/shortlisted-you');
     if (res.isError) {
       ErrorResponseModel errorResponseModel = ErrorResponseModel(
@@ -1435,14 +1440,80 @@ class ServiceConfig {
       return Result.error(errorResponseModel);
     } else {
       var response = res.asValue!.value;
-      ShortlistedYouModel shortlistedYouModel = ShortlistedYouModel.fromJson(response);
+      ShortlistedYouMatchesModel shortlistedYouModel = ShortlistedYouMatchesModel.fromJson(response);
       return Result.value(shortlistedYouModel);
     }
   }
 
 
-  Future<Result> interestReceivedAll() async {
-    Result res = await BaseClient.get('inbox/received');
+  // Future<Result> interestReceivedAll() async {
+  //   Result res = await BaseClient.get('inbox/received');
+  //   if (res.isError) {
+  //     ErrorResponseModel errorResponseModel = ErrorResponseModel(
+  //       errorMessage: 'OOps...!, Something went wrong',
+  //     );
+  //     return Result.error(errorResponseModel);
+  //   } else {
+  //     var response = res.asValue!.value;
+  //     InterestReceivedAllModel interestReceivedAcceptedModel = InterestReceivedAllModel.fromJson(response);
+  //     return Result.value(interestReceivedAcceptedModel);
+  //   }
+  // }
+
+
+
+  // Future<Result> interestReceived(int status) async {
+  //   Result res = await BaseClient.get('inbox/received?status=$status');
+  //   if (res.isError) {
+  //     ErrorResponseModel errorResponseModel = ErrorResponseModel(
+  //       errorMessage: 'OOps...!, Something went wrong',
+  //     );
+  //     return Result.error(errorResponseModel);
+  //   } else {
+  //     var response = res.asValue!.value;
+  //     InterestReceivedModel interestReceivedModel = InterestReceivedModel.fromJson(response);
+  //     return Result.value(interestReceivedModel);
+  //   }
+  // }
+
+  // Future<Result> interestSend(int status) async {
+  //   Result res = await BaseClient.get('inbox/sent?status=$status');
+  //   if (res.isError) {
+  //     ErrorResponseModel errorResponseModel = ErrorResponseModel(
+  //       errorMessage: 'OOps...!, Something went wrong',
+  //     );
+  //     return Result.error(errorResponseModel);
+  //   } else {
+  //     var response = res.asValue!.value;
+  //     InterestSentModel interestSentModel = InterestSentModel.fromJson(response);
+  //     return Result.value(interestSentModel);
+  //   }
+  // }
+
+
+  // Future<Result> respondInterest(int interestid,String status) async {
+  //   Result res = await BaseClient.post('inbox/interests/$interestid/respond',
+  //     body: {
+  //       "status" : status
+  //     }
+  //   );
+  //   if (res.isError) {
+  //     ErrorResponseModel errorResponseModel = ErrorResponseModel(
+  //       errorMessage: 'OOps...!, Something went wrong',
+  //     );
+  //     return Result.error(errorResponseModel);
+  //   } else {
+  //     var response = res.asValue!.value;
+  //     RespondInterestModel interestInterestModel = RespondInterestModel.fromJson(response);
+  //     return Result.value(interestInterestModel);
+  //   }
+  // }
+
+  Future<Result> requestSend(String requesttype,int receiverid) async{
+    Result res = await BaseClient.post('requests/send',body: {
+      "receiver_id" : receiverid,
+      "request_type": requesttype
+    });
     if (res.isError) {
       ErrorResponseModel errorResponseModel = ErrorResponseModel(
         errorMessage: 'OOps...!, Something went wrong',
@@ -1450,94 +1521,46 @@ class ServiceConfig {
       return Result.error(errorResponseModel);
     } else {
       var response = res.asValue!.value;
-      InterestReceivedAllModel interestReceivedAcceptedModel = InterestReceivedAllModel.fromJson(response);
-      return Result.value(interestReceivedAcceptedModel);
+      SendRequestModel sendrequestModel = SendRequestModel.fromJson(response);
+      return Result.value(sendrequestModel);
     }
   }
 
 
 
-  Future<Result> interestReceived(int status) async {
-    Result res = await BaseClient.get('inbox/received?status=$status');
-    if (res.isError) {
-      ErrorResponseModel errorResponseModel = ErrorResponseModel(
-        errorMessage: 'OOps...!, Something went wrong',
-      );
-      return Result.error(errorResponseModel);
-    } else {
-      var response = res.asValue!.value;
-      InterestReceivedModel interestReceivedModel = InterestReceivedModel.fromJson(response);
-      return Result.value(interestReceivedModel);
-    }
-  }
-
-  Future<Result> interestSend(int status) async {
-    Result res = await BaseClient.get('inbox/sent?status=$status');
-    if (res.isError) {
-      ErrorResponseModel errorResponseModel = ErrorResponseModel(
-        errorMessage: 'OOps...!, Something went wrong',
-      );
-      return Result.error(errorResponseModel);
-    } else {
-      var response = res.asValue!.value;
-      InterestSentModel interestSentModel = InterestSentModel.fromJson(response);
-      return Result.value(interestSentModel);
-    }
-  }
-
-
-  Future<Result> respondInterest(int interestid,String status) async {
-    Result res = await BaseClient.post('inbox/interests/$interestid/respond',
-      body: {
-        "status" : status
-      }
-    );
-    if (res.isError) {
-      ErrorResponseModel errorResponseModel = ErrorResponseModel(
-        errorMessage: 'OOps...!, Something went wrong',
-      );
-      return Result.error(errorResponseModel);
-    } else {
-      var response = res.asValue!.value;
-      RespondInterestModel interestInterestModel = RespondInterestModel.fromJson(response);
-      return Result.value(interestInterestModel);
-    }
-  }
-
-
-  Future<Result> request(String type) async{
-    Result res = await BaseClient.get('inbox/requests/received?type=$type');
-    if (res.isError) {
-      ErrorResponseModel errorResponseModel = ErrorResponseModel(
-        errorMessage: 'OOps...!, Something went wrong',
-      );
-      return Result.error(errorResponseModel);
-    } else {
-      var response = res.asValue!.value;
-      RequestModel requestModel = RequestModel.fromJson(response);
-      return Result.value(requestModel);
-    }
-  }
+  // Future<Result> request(String type) async{
+  //   Result res = await BaseClient.get('inbox/requests/received?type=$type');
+  //   if (res.isError) {
+  //     ErrorResponseModel errorResponseModel = ErrorResponseModel(
+  //       errorMessage: 'OOps...!, Something went wrong',
+  //     );
+  //     return Result.error(errorResponseModel);
+  //   } else {
+  //     var response = res.asValue!.value;
+  //     RequestModel requestModel = RequestModel.fromJson(response);
+  //     return Result.value(requestModel);
+  //   }
+  // }
 
 
 
-  Future<Result> requestRespond(int requestid,String status) async{
-    Result res = await BaseClient.post('inbox/requests/$requestid/respond',
-      body: {
-        "status" : status
-      }
-    );
-    if (res.isError) {
-      ErrorResponseModel errorResponseModel = ErrorResponseModel(
-        errorMessage: 'OOps...!, Something went wrong',
-      );
-      return Result.error(errorResponseModel);
-    } else {
-      var response = res.asValue!.value;
-      RespondRequestModel respondRequestModel = RespondRequestModel.fromJson(response);
-      return Result.value(respondRequestModel);
-    }
-  }
+  // Future<Result> requestRespond(int requestid,String status) async{
+  //   Result res = await BaseClient.post('inbox/requests/$requestid/respond',
+  //     body: {
+  //       "status" : status
+  //     }
+  //   );
+  //   if (res.isError) {
+  //     ErrorResponseModel errorResponseModel = ErrorResponseModel(
+  //       errorMessage: 'OOps...!, Something went wrong',
+  //     );
+  //     return Result.error(errorResponseModel);
+  //   } else {
+  //     var response = res.asValue!.value;
+  //     RespondRequestModel respondRequestModel = RespondRequestModel.fromJson(response);
+  //     return Result.value(respondRequestModel);
+  //   }
+  // }
 
   /// Toggles the shortlist for member [id]: shortlists them if they aren't,
   /// removes them if they are. Returns a [ShortListModel] with the new state.
@@ -1557,21 +1580,52 @@ class ServiceConfig {
   }
 
 
-  Future<Result> requestSend(String type) async {
-    Result res = await BaseClient.get('inbox/requests/sent?type=$type');
-    if (res.isError) {
-      ErrorResponseModel errorResponseModel = ErrorResponseModel(
-        errorMessage: 'OOps...!, Something went wrong',
+
+
+
+
+  /// Asks member [receiverId] to reveal a private detail
+  /// (`POST requests/send`). [requestType] is `name`, `photo`, `horoscope`
+  /// or `mobile` (see `ViewRequestType.apiValue`).
+  ///
+  /// Returns the server's message (String, may be empty) on success, or an
+  /// [ErrorResponseModel] with a message to show on failure.
+  Future<Result> sendRequest(String requestType, int receiverId) async {
+    const fallback = 'Could not send your request. Please try again';
+    try {
+      final res = await BaseClient.post(
+        'requests/send',
+        body: {"receiver_id": receiverId, "request_type": requestType},
       );
-      return Result.error(errorResponseModel);
-    } else {
-      var response = res.asValue!.value;
-      RequestSendModel requestSendModel = RequestSendModel.fromJson(response);
-      return Result.value(requestSendModel);
+      // BaseClient returns null when there's no internet connection.
+      if (res is! Result) {
+        return Result.error(
+          ErrorResponseModel(errorMessage: 'No internet connection'),
+        );
+      }
+      if (res.isError) {
+        return Result.error(ErrorResponseModel(errorMessage: fallback));
+      }
+      final response = res.asValue!.value;
+      if (response is Map && response['success'] == false) {
+        final msg = response['message'];
+        return Result.error(
+          ErrorResponseModel(
+            errorMessage: msg is String && msg.isNotEmpty ? msg : fallback,
+          ),
+        );
+      }
+      final msg = response is Map ? response['message'] : null;
+      return Result.value(msg is String ? msg : '');
+    } on AppException catch (e) {
+      debugPrint('send request error: ${e.message}');
+      return Result.error(
+        ErrorResponseModel(
+          errorMessage: _extractErrorMessage(e.message, fallback: fallback),
+        ),
+      );
     }
   }
-
-
 
   Future<Result> contactsViewedByMe() async {
     Result res = await BaseClient.get('inbox/contacts');
@@ -1717,6 +1771,139 @@ class ServiceConfig {
   }
 
 
+  /// `GET inbox/interests?direction=received|sent&status=all|pending|accepted|declined|withdrawn&page=N`
+  Future<Result> inboxInterest(String direction, String status,
+      {int page = 1}) async {
+    final res = await BaseClient.get('inbox/interests', map: {
+      'direction': direction,
+      'status': status,
+      'page': '$page',
+    });
+    if (res is! Result || res.isError || res.asValue!.value is! Map) {
+      return Result.error(ErrorResponseModel(
+        errorMessage: 'Could not load interests. Please try again',
+      ));
+    }
+    final json = Map<String, dynamic>.from(res.asValue!.value as Map);
+    if (json['success'] == false) {
+      return Result.error(ErrorResponseModel(
+        errorMessage: json['message']?.toString() ?? 'Could not load interests',
+      ));
+    }
+    return Result.value(InboxInterestModel.fromJson(json));
+  }
+
+
+  Future<Result> _interestAction(String path, {Map<String, dynamic>? body}) async {
+    final res = await BaseClient.post(path, body: body);
+    if (res is! Result || res.isError) {
+      return Result.error(ErrorResponseModel(
+        errorMessage: 'Something went wrong. Please try again',
+      ));
+    }
+    final value = res.asValue!.value;
+    final json = value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+    final model = RespondInterestModel.fromJson(json);
+    if (json['success'] == false) {
+      return Result.error(ErrorResponseModel(
+        errorMessage: model.message ?? 'Something went wrong. Please try again',
+      ));
+    }
+    return Result.value(model);
+  }
+
+
+  Future<Result> sendInterest(int receiverid) async {
+    Result res = await BaseClient.post('interests',body: {
+      'receiver_id' : receiverid
+    });
+    if(res.isError){
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    }else{
+      var response = res.asValue!.value;
+      SendInterestModel sendInterestModel = SendInterestModel.fromJson(response);
+      return Result.value(sendInterestModel);
+    }
+  }
+
+  Future<Result> respondInterest(String status, String userid) async {
+    Result res = await BaseClient.post('inbox/interests/$userid/respond',body: {
+      'status' : status
+    });
+    if(res.isError){
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    }else{
+      var response = res.asValue!.value;
+      SendInterestModel sendInterestModel = SendInterestModel.fromJson(response);
+      return Result.value(sendInterestModel);
+    }
+  }
+
+  Future<Result> withdraw(String withdraw) async {
+    Result res = await BaseClient.post('inbox/interests/$withdraw/withdraw');
+    if(res.isError){
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: 'OOps...!, Something went wrong',
+      );
+      return Result.error(errorResponseModel);
+    }else{
+      var response = res.asValue!.value;
+      WithdrawModel withdrawModel = WithdrawModel.fromJson(response);
+      return Result.value(withdrawModel);
+    }
+  }
+
+
+  Future<Result> deleteWithdraw(String withdrawid) async {
+    Result res = await BaseClient.delete('inbox/interests/withdrawn/$withdrawid');
+    if(res.isError){
+      ErrorResponseModel errorResponseModel = ErrorResponseModel(
+        errorMessage: "OOps...!, Something went wrong"
+      );
+      return Result.error(errorResponseModel);
+    } else {
+      var response = res.asValue!.value;
+      DeleteWithdrawModel deleteWithdrawModel = DeleteWithdrawModel.fromJson(response);
+      return Result.value(deleteWithdrawModel);
+    }
+  }
+
+
+
+
+
+
+  /// Toggles "Don't show" for member [userid] (`POST profiles/{id}/dont-show`).
+  /// The response's `data.is_hidden` is the member's state after the call.
+  Future<Result> dontShow(String userid) async {
+    final res = await BaseClient.post('profiles/$userid/dont-show');
+    if (res is! Result || res.isError) {
+      return Result.error(ErrorResponseModel(
+        errorMessage: 'Could not update this profile. Please try again',
+      ));
+    }
+    final response = res.asValue!.value;
+    if (response is! Map) {
+      return Result.error(ErrorResponseModel(
+        errorMessage: 'Could not update this profile. Please try again',
+      ));
+    }
+    final model = DontShowModel.fromJson(Map<String, dynamic>.from(response));
+    if (model.success == false) {
+      return Result.error(ErrorResponseModel(
+        errorMessage: model.message ?? 'Could not update this profile',
+      ));
+    }
+    return Result.value(model);
+  }
+
+
   Future<Result> getMatchList(String path,
       {int offset = 0, int limit = 20}) async {
     final res = await BaseClient.get(path, map: {
@@ -1730,7 +1917,15 @@ class ServiceConfig {
     }
     return Result.value(res.asValue!.value);
   }
+
+
+  
 }
+
+
+
+
+
 
 /// Values for the `login_type` field of the `signin` API.
 class LoginType {

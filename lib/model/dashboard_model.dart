@@ -1,11 +1,15 @@
 
 import 'dart:convert';
 
+import 'package:vivahbharath_app/model/match_profile.dart';
+
 DashboardModel dashboardModelFromJson(String str) =>
     DashboardModel.fromJson(json.decode(str));
 
-String dashboardModelToJson(DashboardModel data) =>
-    json.encode(data.toJson());
+/// Parses a list of member cards; a missing/null list becomes empty.
+List<MatchProfile> _profiles(dynamic v) => v is List
+    ? [for (final x in v) if (x is Map<String, dynamic>) MatchProfile.fromJson(x)]
+    : <MatchProfile>[];
 
 class DashboardModel {
   String greeting;
@@ -17,11 +21,11 @@ class DashboardModel {
   Messages messages;
   Subscription subscription;
   Recommendations recommendations;
-  List<DailyMatch> dailyMatches;
-  List<DailyMatch> newMatches;
-  List<dynamic> premiumMatches;
-  List<DailyMatch> recentVisited;
-  List<dynamic> fromYourSearch;
+  List<MatchProfile> dailyMatches;
+  List<MatchProfile> newMatches;
+  List<MatchProfile> premiumMatches;
+  List<MatchProfile> recentVisited;
+  List<MatchProfile> fromYourSearch;
 
   DashboardModel({
     required this.greeting,
@@ -52,36 +56,12 @@ class DashboardModel {
         messages: Messages.fromJson(json["messages"]),
         subscription: Subscription.fromJson(json["subscription"]),
         recommendations: Recommendations.fromJson(json["recommendations"]),
-        dailyMatches: List<DailyMatch>.from(
-            json["daily_matches"].map((x) => DailyMatch.fromJson(x))),
-        newMatches: List<DailyMatch>.from(
-            json["new_matches"].map((x) => DailyMatch.fromJson(x))),
-        premiumMatches: List<dynamic>.from(json["premium_matches"].map((x) => x)),
-        recentVisited: List<DailyMatch>.from(
-            json["recent_visited"].map((x) => DailyMatch.fromJson(x))),
-        fromYourSearch:
-            List<dynamic>.from(json["from_your_search"].map((x) => x)),
+        dailyMatches: _profiles(json["daily_matches"]),
+        newMatches: _profiles(json["new_matches"]),
+        premiumMatches: _profiles(json["premium_matches"]),
+        recentVisited: _profiles(json["recent_visited"]),
+        fromYourSearch: _profiles(json["from_your_search"]),
       );
-
-  Map<String, dynamic> toJson() => {
-        "greeting": greeting,
-        "profile": profile.toJson(),
-        "profile_completion": profileCompletion.toJson(),
-        "stats": stats.toJson(),
-        "activity_counts": activityCounts.toJson(),
-        "notifications": notifications.toJson(),
-        "messages": messages.toJson(),
-        "subscription": subscription.toJson(),
-        "recommendations": recommendations.toJson(),
-        "daily_matches":
-            List<dynamic>.from(dailyMatches.map((x) => x.toJson())),
-        "new_matches": List<dynamic>.from(newMatches.map((x) => x.toJson())),
-        "premium_matches": List<dynamic>.from(premiumMatches.map((x) => x)),
-        "recent_visited":
-            List<dynamic>.from(recentVisited.map((x) => x.toJson())),
-        "from_your_search":
-            List<dynamic>.from(fromYourSearch.map((x) => x)),
-      };
 }
 
 class ActivityCounts {
@@ -303,7 +283,7 @@ class Profile {
   String name;
   String initial;
   String profileId;
-  String imageUrl;
+  String? imageUrl;
   bool isPremium;
 
   Profile({
@@ -320,7 +300,10 @@ class Profile {
         name: json["name"],
         initial: json["initial"],
         profileId: json["profile_id"],
-        imageUrl: json["image_url"],
+        // Empty string from the API means "no photo".
+        imageUrl: (json["image_url"] as String?)?.trim().isEmpty ?? true
+            ? null
+            : json["image_url"],
         isPremium: json["is_premium"],
       );
 
@@ -361,7 +344,7 @@ class Recommendations {
   String title;
   String subtitle;
   bool hasPartnerPreferences;
-  List<DailyMatch> profiles;
+  List<MatchProfile> profiles;
 
   Recommendations({
     required this.title,
@@ -375,16 +358,8 @@ class Recommendations {
         title: json["title"],
         subtitle: json["subtitle"],
         hasPartnerPreferences: json["has_partner_preferences"],
-        profiles: List<DailyMatch>.from(
-            json["profiles"].map((x) => DailyMatch.fromJson(x))),
+        profiles: _profiles(json["profiles"]),
       );
-
-  Map<String, dynamic> toJson() => {
-        "title": title,
-        "subtitle": subtitle,
-        "has_partner_preferences": hasPartnerPreferences,
-        "profiles": List<dynamic>.from(profiles.map((x) => x.toJson())),
-      };
 }
 
 class Stats {

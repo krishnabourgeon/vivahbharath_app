@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vivahbharath_app/model/inbox_interest_model.dart';
+import 'package:vivahbharath_app/provider/home_provider.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/custom/profile_badges.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
 import 'package:vivahbharath_app/view/dashboard/search_screen.dart';
+import 'package:vivahbharath_app/view/drawer/common_activity.dart'
+    show openChatWith;
+import 'package:vivahbharath_app/view/drawer/manage_interset_screen.dart'
+    show InterestFeed, activityPersonOf;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Model
@@ -85,9 +92,35 @@ class InboxEntry {
     this.status = InboxStatus.pending,
     this.kind,
     this.phone,
+    this.api,
   });
 
+  /// Interest entries built from `GET inbox/interests`.
+  factory InboxEntry.fromInterest(Interest i) => InboxEntry(
+        InboxPerson(
+          id: i.profileId.isEmpty ? 'VB[ID]' : i.profileId,
+          name: i.name,
+          nameHidden: i.isNameHidden,
+          lastSeen: i.isOnline ? 'Online now' : i.lastSeen,
+          line1: i.line1,
+          line2: i.line2,
+          line3: i.line3,
+          verified: i.verified,
+          online: i.isOnline,
+          shortlisted: i.isShortlisted,
+          photoUrl: i.photo,
+        ),
+        when: i.timeAgo,
+        status: switch (i.status) {
+          InterestState.accepted => InboxStatus.accepted,
+          InterestState.declined => InboxStatus.declined,
+          _ => InboxStatus.pending,
+        },
+        api: i,
+      );
+
   final InboxPerson person;
+  final Interest? api; // interests only
   final String when; // "2 days ago", "today"
   final int daysAgo; // used by the Shortlisted History filter
   InboxStatus status;
@@ -95,161 +128,21 @@ class InboxEntry {
   final String? phone; // contact numbers only
 }
 
-// ── Sample data (from the app designs). TODO: load from your API. ───────────
+// ── Non-interest sections ────────────────────────────────────────────────────
+// Interests load from the API (HomeProvider.inboxMatches). Requests,
+// Shortlisted and Contact views have no API wired yet, so they start empty.
 class InboxData {
-  InboxData() {
-    final a = InboxPerson(
-      name: '[Name]',
-      lastSeen: 'Last seen 2 weeks ago',
-      line1: '28 Yrs · 5\'4" · [Religion] · [Community]',
-      line2: 'Bachelors Degree · Software Engineer',
-      line3: 'Malappuram · Kerala · India',
-    );
-    final b = InboxPerson(
-      name: '[Name]',
-      lastSeen: 'Last seen 3 hours ago',
-      line1: '25 Yrs · 5\'2" · Hindu · Nair',
-      line2: 'Masters Degree · Teacher',
-      line3: 'Kozhikode · Kerala · India',
-      online: true,
-    );
-    final c = InboxPerson(
-      name: '[Name]',
-      lastSeen: 'Last seen 1 day ago',
-      line1: '27 Yrs · 5\'5" · Hindu · Ezhava',
-      line2: 'Bachelors Degree · Designer',
-      line3: 'Thrissur · Kerala · India',
-    );
-    final d = InboxPerson(
-      name: '[Name]',
-      lastSeen: 'Last seen 55 minutes ago',
-      line1: '26 Yrs · 5\'3" · Hindu · Nair',
-      line2: 'MBBS · Doctor',
-      line3: 'Kannur · Kerala · India',
-      online: true,
-    );
-    final e = InboxPerson(
-      name: '[Name]',
-      lastSeen: 'Last seen 5 hours ago',
-      line1: '24 Yrs · 5\'1" · Hindu · Nair',
-      line2: 'Bachelors Degree · Accountant',
-      line3: 'Kochi · Kerala · India',
-    );
-    final f = InboxPerson(
-      name: 'Maxxxxxxxx',
-      nameHidden: true,
-      photoRequested: true,
-      lastSeen: 'Last seen 1 week ago',
-      line1: '24 Yrs · 4\'9" · Hindu · Thiyya',
-      line2: 'Bachelors Degree · Software Developer',
-      line3: 'Kozhikode · Kerala · India',
-    );
-    final g = InboxPerson(
-      name: '[Name]',
-      lastSeen: 'Last seen 2 hours ago',
-      line1: '26 Yrs · 5\'3" · Hindu · Nair',
-      line2: 'Bachelors Degree · Accountant',
-      line3: 'Kochi · Kerala · India',
-    );
-    final h = InboxPerson(
-      name: 'Axxxxxxxx',
-      nameHidden: true,
-      lastSeen: 'Last seen 5 days ago',
-      line1: '28 Yrs · 5\'4" · Hindu · Ezhava',
-      line2: 'Masters Degree · Lecturer',
-      line3: 'Palakkad · Kerala · India',
-    );
-    final rahul = InboxPerson(
-      id: 'VM2382',
-      name: 'Rahul CK',
-      lastSeen: 'Last seen 1 month ago',
-      line1: '26 Yrs · 5\'4" · Hindu · Thiyya',
-      line2: 'Master Degree · Software Developer',
-      line3: 'Kozhikode · Kerala · India',
-      photoRequested: true,
-      shortlisted: true,
-    );
-    final rax = InboxPerson(
-      id: 'VM2760',
-      name: 'Raxxxxxxxx',
-      nameHidden: true,
-      featured: true,
-      paid: true,
-      photoRequested: true,
-      lastSeen: 'Last seen 5 hours ago',
-      line1: '36 Yrs · 5\'8" · Hindu · Nair',
-      line2: 'Bachelors Degree · Software Engineer',
-      line3: 'Kozhikode · Kerala · India',
-      shortlisted: true,
-    );
-    d.shortlisted = true;
+  final List<InboxEntry> requestsReceived = [];
+  final List<InboxEntry> requestsSent = [];
+  final List<InboxEntry> shortlistedMe = [];
+  final List<InboxEntry> shortlistedByMe = [];
+  final List<InboxEntry> contactsByYou = [];
+  final List<InboxEntry> contactsByOthers = [];
 
-    const accepted = InboxStatus.accepted;
-    const declined = InboxStatus.declined;
-
-    interestsReceived = [
-      InboxEntry(a, when: '2 weeks ago', status: accepted),
-      InboxEntry(b, when: 'today'),
-      InboxEntry(c, when: 'yesterday'),
-      InboxEntry(d, when: '3 days ago', status: declined),
-    ];
-    interestsSent = [
-      InboxEntry(a, when: '2 weeks ago'),
-      InboxEntry(b, when: 'today', status: accepted),
-      InboxEntry(c, when: 'yesterday'),
-      InboxEntry(d, when: '3 days ago'),
-    ];
-    requestsReceived = [
-      InboxEntry(b, when: 'today', kind: RequestKind.photo),
-      InboxEntry(e,
-          when: '4 days ago', kind: RequestKind.photo, status: accepted),
-      InboxEntry(c, when: '1 day ago', kind: RequestKind.number),
-      InboxEntry(d,
-          when: '1 week ago', kind: RequestKind.horoscope, status: declined),
-    ];
-    requestsSent = [
-      InboxEntry(b, when: 'today', kind: RequestKind.photo),
-      InboxEntry(e,
-          when: '4 days ago', kind: RequestKind.photo, status: accepted),
-      InboxEntry(a, when: '2 days ago', kind: RequestKind.name),
-      InboxEntry(c,
-          when: 'last week', kind: RequestKind.horoscope, status: accepted),
-    ];
-    shortlistedMe = [
-      InboxEntry(b, when: 'today'),
-      InboxEntry(c, when: '2 days ago', daysAgo: 2),
-      InboxEntry(d, when: 'last week', daysAgo: 7),
-    ];
-    shortlistedByMe = [
-      InboxEntry(rahul, when: 'today'),
-      InboxEntry(rax, when: '2 days ago', daysAgo: 2),
-      InboxEntry(d, when: '3 weeks ago', daysAgo: 21),
-    ];
-    contactsByYou = [
-      InboxEntry(b, when: '2 days ago', phone: '+91 [Mobile number]'),
-      InboxEntry(c, when: 'last week', phone: '+91 [Mobile number]'),
-      InboxEntry(d, when: '2 weeks ago', phone: '+91 [Mobile number]'),
-    ];
-    contactsByOthers = [
-      InboxEntry(f, when: '1 week ago'),
-      InboxEntry(g, when: 'yesterday'),
-      InboxEntry(h, when: '3 days ago'),
-    ];
-  }
-
-  late List<InboxEntry> interestsReceived;
-  late List<InboxEntry> interestsSent;
-  late List<InboxEntry> requestsReceived;
-  late List<InboxEntry> requestsSent;
-  late List<InboxEntry> shortlistedMe;
-  late List<InboxEntry> shortlistedByMe;
-  late List<InboxEntry> contactsByYou;
-  late List<InboxEntry> contactsByOthers;
-
-  /// Contact views on the current package.
-  int contactViewsUsed = 3;
-  int contactViewsTotal = 10;
-  String packageName = 'Launching offer';
+  /// Contact views on the current package (0 until loaded from the API).
+  int contactViewsUsed = 0;
+  int contactViewsTotal = 0;
+  String packageName = '';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -281,10 +174,62 @@ class _InboxScreenState extends State<InboxScreen> {
   final Set<InboxPerson> _interestSentTo = {};
 
   bool get _received => _view == 0;
+  bool get _isInterests => _section == InboxSection.interests;
+
+  // ── Interests (API, shared with Manage Interest) ──────────────────────────
+  HomeProvider get _home => context.read<HomeProvider>();
+  final InterestFeed _feed = InterestFeed();
+  final Expando<InboxEntry> _entries = Expando();
+
+  InterestDirection get _iDir =>
+      _received ? InterestDirection.received : InterestDirection.sent;
+  InterestState? get _iStatus => switch (_status) {
+        InboxStatus.pending => InterestState.pending,
+        InboxStatus.accepted => InterestState.accepted,
+        InboxStatus.declined => InterestState.declined,
+        null => null,
+      };
+
+  /// Inbox has no Withdrawn filter, so withdrawn interests are left out here
+  /// (they are listed under Manage Interest → Withdrawn).
+  List<InboxEntry> get _interestEntries => [
+        for (final i in _feed.items)
+          if (i.status != InterestState.withdrawn)
+            _entries[i] ??= InboxEntry.fromInterest(i),
+      ];
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadInterests({bool resetCounts = false}) async {
+    if (!_isInterests) return;
+    await _feed.load(_home, _iDir, _iStatus,
+        onChange: _changed, resetCounts: resetCounts);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadInterests());
+  }
+
+  /// Status count for the chips and hero: server counts for interests.
+  int _statusCount(InboxStatus s) {
+    if (!_isInterests) return _count(_base, s);
+    return _feed.count(switch (s) {
+      InboxStatus.pending => InterestState.pending,
+      InboxStatus.accepted => InterestState.accepted,
+      InboxStatus.declined => InterestState.declined,
+    });
+  }
+
+  int get _allCount => _isInterests
+      ? InboxStatus.values.fold(0, (n, s) => n + _statusCount(s))
+      : _base.length;
 
   List<InboxEntry> get _source => switch (_section) {
-        InboxSection.interests =>
-          _received ? _data.interestsReceived : _data.interestsSent,
+        InboxSection.interests => _interestEntries,
         InboxSection.requests =>
           _received ? _data.requestsReceived : _data.requestsSent,
         InboxSection.shortlisted =>
@@ -305,23 +250,47 @@ class _InboxScreenState extends State<InboxScreen> {
     return l;
   }
 
-  List<InboxEntry> get _visible => _status == null
+  /// Interests are already filtered by the server.
+  List<InboxEntry> get _visible => _status == null || _isInterests
       ? _base
       : _base.where((e) => e.status == _status).toList();
 
   int _count(List<InboxEntry> l, InboxStatus s) =>
       l.where((e) => e.status == s).length;
 
-  void _pickSection(InboxSection s) => setState(() {
-        _section = s;
-        _view = 0;
-        _status = null;
-      });
+  void _pickSection(InboxSection s) {
+    setState(() {
+      _section = s;
+      _view = 0;
+      _status = null;
+    });
+    _loadInterests(resetCounts: true);
+  }
 
-  void _pickView(int v) => setState(() {
-        _view = v;
-        _status = null;
-      });
+  void _pickView(int v) {
+    setState(() {
+      _view = v;
+      _status = null;
+    });
+    _loadInterests(resetCounts: true);
+  }
+
+  void _pickStatus(InboxStatus? s) {
+    setState(() => _status = s);
+    _loadInterests();
+  }
+
+  /// Shows [error] or [success], and reloads the list after a change.
+  Future<void> _afterInterest(String? error, String success) async {
+    if (mounted) _toast(error ?? success);
+    if (error == null) await _loadInterests();
+  }
+
+  Future<void> _acceptInterest(Interest i) async => _afterInterest(
+      await _feed.accept(i, _changed), 'Interest accepted. You can now chat.');
+
+  Future<void> _declineInterest(Interest i) async =>
+      _afterInterest(await _feed.decline(i, _changed), 'Interest declined');
 
   // ── Actions ────────────────────────────────────────────────────────────────
   void _toast(String msg, {VoidCallback? onUndo}) {
@@ -378,6 +347,7 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   Widget build(BuildContext context) {
     final rows = _visible;
+    final iPage = _isInterests ? _feed : null;
 
     return Scaffold(
       backgroundColor: AppColors.bgBottom,
@@ -425,7 +395,10 @@ class _InboxScreenState extends State<InboxScreen> {
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: ListView(
+                child: RefreshIndicator(
+                  onRefresh: _loadInterests,
+                  child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                   children: [
                     _hero(),
@@ -470,7 +443,22 @@ class _InboxScreenState extends State<InboxScreen> {
                       ),
                       const SizedBox(height: 12),
                     ],
-                    if (rows.isEmpty) _EmptyBox(_emptyText()),
+                    if (rows.isEmpty &&
+                        iPage != null &&
+                        iPage.error == null &&
+                        (iPage.loading || !iPage.loaded))
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (rows.isEmpty && iPage?.error != null) ...[
+                      _EmptyBox(iPage!.error!),
+                      TextButton(
+                        onPressed: _loadInterests,
+                        child: const Text('Try again'),
+                      ),
+                    ] else if (rows.isEmpty)
+                      _EmptyBox(_emptyText()),
                     for (final e in rows) ...[
                       _InboxCard(
                         entry: e,
@@ -489,6 +477,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     ],
                   ],
                 ),
+                ),
               ),
             ],
           ),
@@ -499,16 +488,15 @@ class _InboxScreenState extends State<InboxScreen> {
 
   // ── Hero summary per view ────────────────────────────────────────────────
   Widget _hero() {
-    final all = _base;
     final counts = [
-      ('Pending', _count(all, InboxStatus.pending)),
+      ('Pending', _statusCount(InboxStatus.pending)),
       (
         _section == InboxSection.requests ? 'Approved' : 'Accepted',
-        _count(all, InboxStatus.accepted)
+        _statusCount(InboxStatus.accepted)
       ),
-      ('Declined', _count(all, InboxStatus.declined)),
+      ('Declined', _statusCount(InboxStatus.declined)),
     ];
-    final n = _source.length;
+    final n = _isInterests ? _allCount : _source.length;
 
     switch (_section) {
       case InboxSection.interests:
@@ -555,7 +543,7 @@ class _InboxScreenState extends State<InboxScreen> {
           subtitle: _received
               ? "Call or message the families you've connected with"
               : 'They may call you soon. Keep your phone handy!',
-          footer: _received
+          footer: _received && total > 0
               ? _ContactViewsMeter(
                   used: used,
                   total: total,
@@ -568,12 +556,11 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Widget _statusChips() {
-    final all = _base;
     final items = <(InboxStatus?, String)>[
-      (null, 'All (${all.length})'),
-      (InboxStatus.pending, 'Pending (${_count(all, InboxStatus.pending)})'),
-      (InboxStatus.accepted, 'Accepted (${_count(all, InboxStatus.accepted)})'),
-      (InboxStatus.declined, 'Declined (${_count(all, InboxStatus.declined)})'),
+      (null, 'All ($_allCount)'),
+      (InboxStatus.pending, 'Pending (${_statusCount(InboxStatus.pending)})'),
+      (InboxStatus.accepted, 'Accepted (${_statusCount(InboxStatus.accepted)})'),
+      (InboxStatus.declined, 'Declined (${_statusCount(InboxStatus.declined)})'),
     ];
     return SizedBox(
       height: 38,
@@ -584,7 +571,7 @@ class _InboxScreenState extends State<InboxScreen> {
         itemBuilder: (_, i) => FilterPill(
           label: items[i].$2,
           selected: items[i].$1 == _status,
-          onTap: () => setState(() => _status = items[i].$1),
+          onTap: () => _pickStatus(items[i].$1),
         ),
       ),
     );
@@ -660,36 +647,37 @@ class _InboxScreenState extends State<InboxScreen> {
     switch (_section) {
       // Interests
       case InboxSection.interests:
+        final i = e.api;
+        if (i == null) return null;
+        if (_feed.isBusy(i)) {
+          return _statusPill(
+              'Updating…', Icons.hourglass_top_rounded, _Tone.waiting);
+        }
         switch (e.status) {
           case InboxStatus.pending:
-            return _received
-                ? _pair(
-                    _outline('Decline', Icons.close_rounded,
-                        () => _setStatus(e, InboxStatus.declined, 'Interest declined')),
-                    _primary('Accept', Icons.check_rounded,
-                        () => _setStatus(e, InboxStatus.accepted, 'Interest accepted')),
-                  )
-                : _pair(
-                    _statusPill('Awaiting response', Icons.schedule_rounded,
-                        _Tone.waiting),
-                    _outline('Withdraw', Icons.undo_rounded, () {
-                      final list = _data.interestsSent;
-                      final i = list.indexOf(e);
-                      setState(() => list.removeAt(i));
-                      _toast('Interest withdrawn',
-                          onUndo: () => setState(() => list.insert(i, e)));
-                    }),
-                  );
+            if (_received) {
+              return i.canRespond
+                  ? _pair(
+                      _outline('Decline', Icons.close_rounded,
+                          () => _declineInterest(i)),
+                      _primary('Accept', Icons.check_rounded,
+                          () => _acceptInterest(i)),
+                    )
+                  : _statusPill('Pending', Icons.schedule_rounded, _Tone.waiting);
+            }
+            // Withdraw lives in Manage Interest only.
+            return _statusPill(
+                'Awaiting response', Icons.schedule_rounded, _Tone.waiting);
           case InboxStatus.accepted:
             return _pair(
               _statusPill('Accepted', Icons.check_rounded, _Tone.ok),
               _cream('Chat now', Icons.chat_bubble_outline_rounded,
-                  () {/* TODO: open chat */}),
+                  () => openChatWith(context, activityPersonOf(i))),
             );
           case InboxStatus.declined:
-            return _received
-                ? _statusWithLink('Declined', 'Undo',
-                    () => setState(() => e.status = InboxStatus.pending))
+            return _received && i.canRespond
+                ? _statusWithLink(
+                    'Declined', 'Accept', () => _acceptInterest(i))
                 : _statusPill('Declined', Icons.close_rounded, _Tone.bad);
         }
 

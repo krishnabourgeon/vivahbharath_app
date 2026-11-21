@@ -313,43 +313,113 @@
 
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vivahbharath_app/model/inbox_interest_model.dart';
+import 'package:vivahbharath_app/provider/home_provider.dart';
+import 'package:vivahbharath_app/view/custom/interest_actions.dart';
 import 'package:vivahbharath_app/view/dashboard/search_screen.dart';
 import 'package:vivahbharath_app/view/drawer/common_activity.dart';
 
+/// Card person built from an API interest.
+ActivityPerson activityPersonOf(Interest i) => ActivityPerson(
+      id: i.profileId.isEmpty ? 'VB[ID]' : i.profileId,
+      name: i.name,
+      nameHidden: i.isNameHidden,
+      lastSeen: i.isOnline ? 'Online now' : i.lastSeen,
+      line1: i.line1,
+      line2: i.line2,
+      line3: i.line3,
+      online: i.isOnline,
+      verified: i.verified,
+      photoUrl: i.photo,
+    );
 
-class InterestItem {
-  InterestItem(this.person, {required this.when, this.status = ActStatus.pending});
-  final ActivityPerson person;
-  final String when;
-  ActStatus status;
+/// One screen's view of `GET inbox/interests`, loaded through
+/// [HomeProvider.inboxMatches]. Used by Inbox and Manage Interest.
+///
+/// HomeProvider keeps a single [HomeProvider.inboxInterestModel], so each
+/// load snapshots it here and ignores the result of a superseded load.
+class InterestFeed {
+  List<Interest> items = const [];
+  StatusCounts counts = StatusCounts();
+  bool loading = false;
+  bool loaded = false;
+  String? error;
+
+  /// Interest ids with an accept / decline / withdraw in flight.
+  final Set<int> busy = {};
+
+  int _token = 0;
+
+  bool isBusy(Interest i) => busy.contains(i.interestId);
+  int count(InterestState s) => counts.of(s);
+
+  /// Loads [dir] / [status] (null = all). Counts stay while loading so the
+  /// filters don't flash to 0; pass [resetCounts] when the direction changes.
+  Future<void> load(
+    HomeProvider home,
+    InterestDirection dir,
+    InterestState? status, {
+    required VoidCallback onChange,
+    bool resetCounts = false,
+  }) async {
+    final token = ++_token;
+    items = const [];
+    loading = true;
+    loaded = false;
+    error = null;
+    if (resetCounts) counts = StatusCounts();
+    onChange();
+
+    home.inboxInterestModel = null;
+    await home.inboxMatches(dir.name, status?.name ?? 'all');
+    if (token != _token) return;
+
+    final m = home.inboxInterestModel;
+    loading = false;
+    loaded = true;
+    if (m == null) {
+      error = 'Could not load interests. Check your connection and try again.';
+    } else {
+      items = m.data;
+      counts = m.statusCounts;
+    }
+    onChange();
+  }
+
+  /// Runs [call] with [i] marked busy. Returns null on success, else a message.
+  Future<String?> _run(Interest i, Future<String?> Function() call,
+      VoidCallback onChange) async {
+    if (!busy.add(i.interestId)) return null;
+    onChange();
+    try {
+      return await call();
+    } finally {
+      busy.remove(i.interestId);
+      onChange();
+    }
+  }
+
+  Future<String?> accept(Interest i, VoidCallback onChange) =>
+      _run(i, () => respondInterestApi(i, accept: true), onChange);
+
+  Future<String?> decline(Interest i, VoidCallback onChange) =>
+      _run(i, () => respondInterestApi(i, accept: false), onChange);
+
+  Future<String?> withdraw(Interest i, VoidCallback onChange) =>
+      _run(i, () => withdrawInterestApi(i), onChange);
+
+  Future<String?> delete(Interest i, VoidCallback onChange) =>
+      _run(i, () => deleteWithdrawnApi(i), onChange);
 }
 
-/// Sample data from the app designs — replace with your API.
-List<InterestItem> sampleInterestsReceived() => [
-      InterestItem(SamplePeople.b, when: 'today'),
-      InterestItem(SamplePeople.c, when: 'yesterday'),
-      InterestItem(SamplePeople.a, when: '2 weeks ago', status: ActStatus.accepted),
-      InterestItem(SamplePeople.d, when: '3 days ago', status: ActStatus.declined),
-    ];
-
-List<InterestItem> sampleInterestsSent() => [
-      InterestItem(SamplePeople.a, when: '2 weeks ago'),
-      InterestItem(SamplePeople.b, when: 'today', status: ActStatus.accepted),
-      InterestItem(SamplePeople.c, when: 'yesterday'),
-      InterestItem(SamplePeople.e, when: 'last week', status: ActStatus.withdrawn),
-    ];
+InterestState _toState(ActStatus s) => InterestState.values.byName(s.name);
 
 class ManageInterestScreen extends StatefulWidget {
   const ManageInterestScreen({
     super.key,
     this.initialTab = 0,
     this.initialFilter = ActStatus.pending,
-    this.received,
-    this.sent,
-    this.onAccept,
-    this.onDecline,
-    this.onWithdraw,
-    this.onDeleteWithdrawn,
     this.onOpenProfile,
     this.showBottomNav = true,
   });
@@ -357,17 +427,9 @@ class ManageInterestScreen extends StatefulWidget {
   /// 0 = Received, 1 = Sent.
   final int initialTab;
 
-  /// Which tile is selected first (null = all).
-  final ActStatus? initialFilter;
-  final List<InterestItem>? received;
-  final List<InterestItem>? sent;
-
-  // TODO: connect to your API.
-  final void Function(InterestItem item)? onAccept;
-  final void Function(InterestItem item)? onDecline;
-  final void Function(InterestItem item)? onWithdraw;
-  final void Function(InterestItem item)? onDeleteWithdrawn;
-  final void Function(ActivityPerson person)? onOpenProfile;
+  /// Which status tile is selected first.
+  final ActStatus initialFilter;
+  final void Function(Interest interest)? onOpenProfile;
   final bool showBottomNav;
 
   @override
@@ -375,50 +437,78 @@ class ManageInterestScreen extends StatefulWidget {
 }
 
 class _ManageInterestScreenState extends State<ManageInterestScreen> {
-  late int _tab =
-      widget.initialFilter == ActStatus.withdrawn ? 1 : widget.initialTab;
-  late ActStatus? _filter = widget.initialFilter;
-  late final List<InterestItem> _received =
-      widget.received ?? sampleInterestsReceived();
-  late final List<InterestItem> _sent = widget.sent ?? sampleInterestsSent();
+  late int _tab = widget.initialTab;
 
-  bool get _received0 => _tab == 0;
-  bool get _withdrawnView => _filter == ActStatus.withdrawn;
+  /// Always one of Pending / Accepted / Declined / Withdrawn (no "all" here).
+  late ActStatus _filter = widget.initialFilter;
+  final InterestFeed _feed = InterestFeed();
 
-  /// Active (not withdrawn) items of the current tab.
-  List<InterestItem> get _active => (_received0 ? _received : _sent)
-      .where((i) => i.status != ActStatus.withdrawn)
-      .toList();
+  bool get _receivedTab => _tab == 0;
+  InterestDirection get _dir =>
+      _receivedTab ? InterestDirection.received : InterestDirection.sent;
 
-  List<InterestItem> get _visible {
-    if (_withdrawnView) {
-      return _sent.where((i) => i.status == ActStatus.withdrawn).toList();
-    }
-    return _filter == null
-        ? _active
-        : _active.where((i) => i.status == _filter).toList();
+  HomeProvider get _home => context.read<HomeProvider>();
+
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
-  Map<ActStatus, int> get _counts => {
-        for (final s in [ActStatus.accepted, ActStatus.pending, ActStatus.declined])
-          s: _active.where((i) => i.status == s).length,
-        ActStatus.withdrawn:
-            _sent.where((i) => i.status == ActStatus.withdrawn).length,
-      };
-
-  void _pickFilter(ActStatus? s) => setState(() {
-        _filter = s;
-        if (s == ActStatus.withdrawn) _tab = 1; // withdrawn = sent only
-      });
-
-  void _set(InterestItem i, ActStatus s, String msg) {
-    final old = i.status;
-    setState(() => i.status = s);
-    showActivityToast(context, msg,
-        onUndo: () => setState(() => i.status = old));
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _withdraw(InterestItem i) async {
+  Future<void> _load({bool resetCounts = false}) => _feed.load(
+        _home,
+        _dir,
+        _toState(_filter),
+        onChange: _changed,
+        resetCounts: resetCounts,
+      );
+
+  void _pickFilter(ActStatus? s) {
+    // Tapping the selected tile again keeps it selected.
+    if (s == null || s == _filter) return;
+    setState(() => _filter = s);
+    _load();
+  }
+
+  void _pickTab(int i) {
+    if (i == _tab) return;
+    setState(() => _tab = i);
+    _load(resetCounts: true);
+  }
+
+  void _toast(String msg) {
+    if (mounted) showActivityToast(context, msg);
+  }
+
+  /// Shows [error] or [success], and reloads the list after a change.
+  Future<void> _after(String? error, String success) async {
+    _toast(error ?? success);
+    if (error == null) await _load();
+  }
+
+  Future<void> _accept(Interest i) async =>
+      _after(await _feed.accept(i, _changed),
+          'Interest accepted. You can now chat.');
+
+  Future<void> _decline(Interest i) async =>
+      _after(await _feed.decline(i, _changed), 'Interest declined');
+
+  Future<void> _delete(Interest i) async {
+    final ok = await confirmAction(
+      context,
+      title: 'Delete this withdrawn interest?',
+      message: 'It will be removed from your Withdrawn list.',
+      confirm: 'Delete',
+    );
+    if (!ok || !mounted) return;
+    await _after(await _feed.delete(i, _changed), 'Withdrawn interest deleted');
+  }
+
+  Future<void> _withdraw(Interest i) async {
     final ok = await confirmAction(
       context,
       title: 'Withdraw your interest?',
@@ -427,46 +517,35 @@ class _ManageInterestScreenState extends State<ManageInterestScreen> {
       confirm: 'Withdraw',
     );
     if (!ok || !mounted) return;
-    widget.onWithdraw?.call(i);
-    _set(i, ActStatus.withdrawn, 'Interest withdrawn');
-  }
-
-  Future<void> _delete(InterestItem i) async {
-    final ok = await confirmAction(
-      context,
-      title: 'Delete this withdrawn interest?',
-      message: 'It will be removed from your Withdrawn list.',
-      confirm: 'Delete',
-    );
-    if (!ok || !mounted) return;
-    final idx = _sent.indexOf(i);
-    setState(() => _sent.removeAt(idx));
-    widget.onDeleteWithdrawn?.call(i);
-    showActivityToast(context, 'Removed from Withdrawn',
-        onUndo: () => setState(() => _sent.insert(idx, i)));
+    await _after(await _feed.withdraw(i, _changed), 'Interest withdrawn');
   }
 
   (String, String) get _header {
-    if (_received0) {
+    if (_receivedTab) {
       return switch (_filter) {
         ActStatus.pending => ('Pending List', 'Members waiting for your reply'),
         ActStatus.accepted => ('Accepted List', 'Members you accepted'),
         ActStatus.declined => ('Declined List', 'Members you declined'),
-        _ => ('All Interests', 'Everyone who sent you interest'),
+        ActStatus.withdrawn =>
+          ('Withdrawn List', 'Members who withdrew their interest'),
       };
     }
     return switch (_filter) {
       ActStatus.pending => ('Pending List', 'Waiting for their reply'),
-      ActStatus.accepted => ('Accepted List', 'Members who accepted your interest'),
-      ActStatus.declined => ('Declined List', 'Members who declined your interest'),
+      ActStatus.accepted =>
+        ('Accepted List', 'Members who accepted your interest'),
+      ActStatus.declined =>
+        ('Declined List', 'Members who declined your interest'),
       ActStatus.withdrawn => ('Withdrawn List', 'Interests you withdrew'),
-      null => ('All Interests', "Interests you've sent"),
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final rows = _visible;
+    final rows = _feed.items;
+    final counts = <ActStatus, int>{
+      for (final s in ActStatus.values) s: _feed.count(_toState(s)),
+    };
     final (title, subtitle) = _header;
 
     return ActivityPage(
@@ -474,110 +553,127 @@ class _ManageInterestScreenState extends State<ManageInterestScreen> {
       children: [
         const SearchTopBar(title: 'Manage your interest'),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            children: [
-              ActStatRow(
-                counts: _counts,
-                selected: _filter,
-                onPick: _pickFilter,
-              ),
-              const SizedBox(height: 18),
-              ActListHeader(
-                title: title,
-                subtitle: subtitle,
-                onShowAll: _filter == null ? null : () => _pickFilter(null),
-              ),
-              const SizedBox(height: 12),
-              if (!_withdrawnView) ...[
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              children: [
+                ActStatRow(
+                  counts: counts,
+                  selected: _filter,
+                  onPick: _pickFilter,
+                ),
+                const SizedBox(height: 18),
+                ActListHeader(title: title, subtitle: subtitle),
+                const SizedBox(height: 12),
                 ActSegmented(
                   labels: const ['Received', 'Sent'],
                   index: _tab,
-                  onPick: (i) => setState(() => _tab = i),
+                  onPick: _pickTab,
                 ),
                 const SizedBox(height: 14),
+                if (rows.isEmpty && (_feed.loading || !_feed.loaded))
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (rows.isEmpty && _feed.error != null) ...[
+                  ActEmpty(icon: Icons.wifi_off_rounded, text: _feed.error!),
+                  TextButton(
+                    onPressed: _load,
+                    child: const Text('Try again'),
+                  ),
+                ] else if (rows.isEmpty)
+                  ActEmpty(
+                    icon: _filter == ActStatus.withdrawn
+                        ? Icons.undo_rounded
+                        : Icons.favorite_border_rounded,
+                    text: _emptyText(),
+                  ),
+                for (final i in rows) ...[
+                  ActivityCard(
+                    person: activityPersonOf(i),
+                    highlight: !i.isSent && i.status == InterestState.pending,
+                    noteIcon: i.status == InterestState.withdrawn
+                        ? Icons.undo_rounded
+                        : Icons.favorite_border_rounded,
+                    note: _note(i),
+                    actions: _actions(i),
+                    onTap: () => widget.onOpenProfile?.call(i),
+                  ),
+                  const SizedBox(height: 14),
+                ],
               ],
-              if (rows.isEmpty)
-                ActEmpty(
-                  icon: _withdrawnView
-                      ? Icons.undo_rounded
-                      : Icons.favorite_border_rounded,
-                  text: _emptyText(),
-                ),
-              for (final i in rows) ...[
-                ActivityCard(
-                  person: i.person,
-                  highlight: _received0 &&
-                      !_withdrawnView &&
-                      i.status == ActStatus.pending,
-                  noteIcon: i.status == ActStatus.withdrawn
-                      ? Icons.undo_rounded
-                      : Icons.favorite_border_rounded,
-                  note: i.status == ActStatus.withdrawn
-                      ? 'You withdrew this interest · sent ${i.when}'
-                      : (_received0 && !_withdrawnView
-                          ? 'Sent you interest · ${i.when}'
-                          : 'You sent interest · ${i.when}'),
-                  actions: _actions(i),
-                  onTap: () => widget.onOpenProfile?.call(i.person),
-                ),
-                const SizedBox(height: 14),
-              ],
-            ],
+            ),
           ),
         ),
       ],
     );
   }
 
+  String _note(Interest i) {
+    final when = i.timeAgo;
+    if (i.status == InterestState.withdrawn) {
+      return i.isSent
+          ? 'You withdrew this interest · sent $when'
+          : 'Withdrew their interest · sent $when';
+    }
+    return i.isSent ? 'You sent interest · $when' : 'Sent you interest · $when';
+  }
+
   String _emptyText() {
-    final dir = _received0 ? 'received' : 'sent';
+    final dir = _receivedTab ? 'received' : 'sent';
     return switch (_filter) {
       ActStatus.pending => 'No pending $dir interests.',
       ActStatus.accepted => 'No accepted $dir interests.',
       ActStatus.declined => 'No declined $dir interests.',
-      ActStatus.withdrawn => 'No withdrawn interests.',
-      null => 'No $dir interests yet.',
+      ActStatus.withdrawn => 'No withdrawn $dir interests.',
     };
   }
 
-  Widget _actions(InterestItem i) {
-    final received = _received0 && !_withdrawnView;
+  Widget _actions(Interest i) {
+    if (_feed.isBusy(i)) {
+      return actStatus('Updating…', Icons.hourglass_top_rounded, ActTone.waiting);
+    }
+    final received = !i.isSent;
     switch (i.status) {
-      case ActStatus.pending:
-        return received
-            ? actPair(
-                actOutline('Decline', Icons.close_rounded, () {
-                  widget.onDecline?.call(i);
-                  _set(i, ActStatus.declined, 'Interest declined');
-                }),
-                actPrimary('Accept', Icons.check_rounded, () {
-                  widget.onAccept?.call(i);
-                  _set(i, ActStatus.accepted,
-                      'Interest accepted. You can now chat.');
-                }),
-              )
-            : actPair(
-                actStatus('Awaiting response', Icons.schedule_rounded,
-                    ActTone.waiting),
-                actOutline('Withdraw', Icons.undo_rounded, () => _withdraw(i)),
-              );
-      case ActStatus.accepted:
+      case InterestState.pending:
+        if (received) {
+          return i.canRespond
+              ? actPair(
+                  actOutline('Decline', Icons.close_rounded, () => _decline(i)),
+                  actPrimary('Accept', Icons.check_rounded, () => _accept(i)),
+                )
+              : actStatus('Pending', Icons.schedule_rounded, ActTone.waiting);
+        }
+        final waiting =
+            actStatus('Awaiting response', Icons.schedule_rounded, ActTone.waiting);
+        return i.canWithdraw
+            ? actPair(waiting,
+                actOutline('Withdraw', Icons.undo_rounded, () => _withdraw(i)))
+            : waiting;
+      case InterestState.accepted:
         return actPair(
           actStatus('Accepted', Icons.check_rounded, ActTone.ok),
           actCream('Chat now', Icons.chat_bubble_outline_rounded,
-              () => openChatWith(context, i.person)),
+              () => openChatWith(context, activityPersonOf(i))),
         );
-      case ActStatus.declined:
-        return received
-            ? actStatusWithLink('Declined', ActTone.bad, 'Undo',
-                () => setState(() => i.status = ActStatus.pending))
+      case InterestState.declined:
+        return received && i.canRespond
+            ? actStatusWithLink(
+                'Declined', ActTone.bad, 'Accept', () => _accept(i))
             : actStatus('Declined', Icons.close_rounded, ActTone.bad);
-      case ActStatus.withdrawn:
-        return actPair(
-          actStatus('Withdrawn', Icons.undo_rounded, ActTone.waiting),
-          actOutline('Delete', Icons.delete_outline_rounded, () => _delete(i)),
-        );
+      case InterestState.withdrawn:
+        final pill =
+            actStatus('Withdrawn', Icons.undo_rounded, ActTone.waiting);
+        // Only the member who withdrew can delete it, and only once.
+        return canDeleteWithdrawn(i)
+            ? actPair(
+                pill,
+                actOutline(
+                    'Delete', Icons.delete_outline_rounded, () => _delete(i)))
+            : pill;
     }
   }
 }

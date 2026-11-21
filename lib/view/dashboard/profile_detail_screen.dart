@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vivahbharath_app/provider/matches_provider.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
+import 'package:vivahbharath_app/view/custom/interest_actions.dart';
+import 'package:vivahbharath_app/model/view_request.dart';
 import 'package:vivahbharath_app/view/custom/profile_badges.dart';
+import 'package:vivahbharath_app/view/custom/request_access.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
 import 'package:vivahbharath_app/view/drawer/chat_screen.dart';
 import 'package:vivahbharath_app/view/drawer/subscription_screen.dart';
@@ -63,7 +68,78 @@ class MemberProfile {
     this.shortlisted = false,
     this.interest = MemberInterest.awaiting,
     this.similar = const [],
-  });
+    this.apiId,
+    this.privacy = ProfilePrivacy.open,
+    Set<ViewRequestType>? requested,
+  }) : requested = requested ?? {};
+
+  /// Builds the detail view from a match card. Fields the list APIs don't
+  /// send (about, family, horoscope, preferences) show "—" until a profile
+  /// detail API is wired in.
+  factory MemberProfile.fromMatch(MatchProfile m) {
+    const dash = '—';
+    String or(String s) => s.trim().isEmpty ? dash : s;
+    final sample = sampleMember();
+    return MemberProfile(
+      apiId: m.apiId,
+      name: m.name,
+      id: m.id,
+      lastSeen: m.lastSeen,
+      online: m.online,
+      verified: m.verified,
+      premium: m.paid,
+      featured: m.featured,
+      nameHidden: m.nameHidden,
+      photoHidden: m.privacy.isLocked(ViewRequestType.photo),
+      photoUrls: [if (m.photoUrl != null) m.photoUrl!],
+      photoCount: m.photoUrl == null ? 1 : 0,
+      shortlisted: m.shortlisted,
+      interest: switch (m.status) {
+        InterestStatus.send => MemberInterest.send,
+        InterestStatus.awaiting => MemberInterest.awaiting,
+        InterestStatus.resend => MemberInterest.resend,
+        InterestStatus.accepted => MemberInterest.accepted,
+      },
+      chips: [
+        if (m.age != null) '${m.age} yrs',
+        if (m.caste.isNotEmpty) m.caste,
+        if (m.education.isNotEmpty) m.education,
+        if (m.profession.isNotEmpty) m.profession,
+        if (m.city.isNotEmpty) m.city,
+      ],
+      about: dash,
+      basic: [
+        ('Age', m.age == null ? dash : '${m.age} Years'),
+        ('Physique', or(m.height)),
+        ('Lives In', or(m.city)),
+        ('Education', or(m.education)),
+        ('Occupation', or(m.profession)),
+      ],
+      moreBasic: [('Community', or(m.caste))],
+      maskedPhone: '**********',
+      family: sample.family,
+      horoscope: sample.horoscope,
+      preferences: sample.preferences,
+      privacy: m.privacy,
+      // Shared set: a request sent here also shows on the match card.
+      requested: m.requested,
+    );
+  }
+
+  /// Numeric member id for the API (`requests/send` receiver_id).
+  final int? apiId;
+
+  /// What the viewer may see; locked parts show a "Request …" button.
+  final ProfilePrivacy privacy;
+
+  /// Privacy requests already sent to this member and awaiting a reply.
+  final Set<ViewRequestType> requested;
+
+  bool isLocked(ViewRequestType t) => switch (t) {
+    ViewRequestType.name => nameHidden || privacy.isLocked(t),
+    ViewRequestType.photo => photoHidden || privacy.isLocked(t),
+    _ => privacy.isLocked(t),
+  };
 
   final String name;
   final String id;
@@ -214,8 +290,15 @@ class ProfileDetailScreen extends StatefulWidget {
     this.onBlock,
     this.onOpenSimilar,
     this.onUpgrade,
+    this.onRequestAccess,
     this.showBottomNav = true,
   });
+
+  /// Sends a privacy request (name / photo / horoscope / mobile) for this
+  /// member. Return null on success or an error message to show.
+  /// When null, the screen calls `requests/send` itself using
+  /// [MemberProfile.apiId].
+  final Future<String?> Function(ViewRequestType type)? onRequestAccess;
 
   final MemberProfile? profile;
 
@@ -227,7 +310,10 @@ class ProfileDetailScreen extends StatefulWidget {
   final VoidCallback? onCall;
   final VoidCallback? onWhatsApp;
   final VoidCallback? onSendInterest;
-  final VoidCallback? onDontShow;
+  /// Marks this member as "Don't show". Return null on success or an error
+  /// message to show. When null, the screen calls `profiles/{id}/dont-show`
+  /// itself using [MemberProfile.apiId].
+  final Future<String?> Function()? onDontShow;
   final VoidCallback? onRequestPhoto;
   final VoidCallback? onReport;
   final VoidCallback? onBlock;
@@ -248,9 +334,32 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   final _tabsKey = GlobalKey();
 
   @override
+  void initState() {
+    super.initState();
+    sentInterests.addListener(_onSentInterests);
+  }
+
+  @override
   void dispose() {
+    sentInterests.removeListener(_onSentInterests);
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _onSentInterests() {
+    if (mounted) setState(() {});
+  }
+
+  /// [_p.interest] with sends / withdraws from any screen applied.
+  MemberInterest get _interest {
+    final sent = sentInterests.stateOf(_p.apiId);
+    if (sent == null || _p.interest == MemberInterest.accepted) {
+      return _p.interest;
+    }
+    if (sent) return MemberInterest.awaiting;
+    return _p.interest == MemberInterest.awaiting
+        ? MemberInterest.resend
+        : _p.interest;
   }
 
   void _toast(String msg, {VoidCallback? onUndo}) {
@@ -260,6 +369,9 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.navy,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        duration: const Duration(seconds: 5),
+        // A snackbar with an action (Undo) stays open by default.
+        persist: false,
         content: Text(msg, style: const TextStyle(fontSize: 13)),
         action: onUndo == null
             ? null
@@ -270,25 +382,83 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       ));
   }
 
+  // ── Privacy requests ───────────────────────────────────────────────────────
+  final Set<ViewRequestType> _requesting = {};
+
+  bool _isRequested(ViewRequestType t) => _p.requested.contains(t);
+
+  Future<void> _requestAccess(ViewRequestType t) async {
+    if (_isRequested(t)) {
+      showRequestPendingDialog(context, t);
+      return;
+    }
+    if (!_requesting.add(t)) return;
+    setState(() {});
+    String? error;
+    try {
+      if (widget.onRequestAccess != null) {
+        error = await widget.onRequestAccess!(t);
+      } else if (_p.apiId != null) {
+        error = await context.read<MatchesProvider>().sendViewRequestTo(
+          _p.apiId!,
+          t,
+        );
+      } else {
+        error = 'This profile cannot be requested right now';
+      }
+    } finally {
+      _requesting.remove(t);
+    }
+    if (!mounted) return;
+    setState(() {
+      if (error == null) _p.requested.add(t);
+    });
+    _toast(error ?? '${t.label} request sent');
+  }
+
   void _toggleShortlist() {
     setState(() => _p.shortlisted = !_p.shortlisted);
     _toast(_p.shortlisted ? 'Added to your shortlist' : 'Removed from your shortlist');
   }
 
-  void _sendInterest() {
-    setState(() => _p.interest = MemberInterest.awaiting);
-    widget.onSendInterest?.call();
-    _toast('Interest sent');
+  Future<void> _sendInterest() async {
+    if (_interest == MemberInterest.awaiting ||
+        _interest == MemberInterest.accepted) {
+      return;
+    }
+    final error = await sendInterestApi(_p.apiId);
+    if (!mounted) return;
+    if (error == null) {
+      setState(() => _p.interest = MemberInterest.awaiting);
+      widget.onSendInterest?.call();
+    }
+    _toast(error ?? 'Interest sent');
   }
 
-  void _dontShow() {
-    widget.onDontShow?.call();
-    _toast("You won't see this profile in your matches");
-    Navigator.of(context).maybePop();
+  bool _hiding = false;
+
+  Future<void> _dontShow() async {
+    if (_hiding) return;
+    setState(() => _hiding = true);
+    String? error;
+    try {
+      if (widget.onDontShow != null) {
+        error = await widget.onDontShow!();
+      } else if (_p.apiId != null) {
+        error = await context.read<MatchesProvider>().dontShowMember(_p.apiId!);
+      } else {
+        error = 'This profile cannot be updated right now';
+      }
+    } finally {
+      if (mounted) setState(() => _hiding = false);
+    }
+    if (!mounted) return;
+    _toast(error ?? "You won't see this profile in your matches");
+    if (error == null) Navigator.of(context).maybePop();
   }
 
   void _openChat() {
-    if (_p.interest != MemberInterest.accepted) {
+    if (_interest != MemberInterest.accepted) {
       _toast('You can chat once ${_p.pronoun.toLowerCase() == 'her' ? 'she' : 'he'} accepts your interest');
       return;
     }
@@ -411,9 +581,12 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                   profile: _p,
                   index: _photo,
                   onPage: (i) => setState(() => _photo = i),
+                  photoRequested: _isRequested(ViewRequestType.photo),
+                  requestingPhoto:
+                      _requesting.contains(ViewRequestType.photo),
                   onRequestPhoto: () {
                     widget.onRequestPhoto?.call();
-                    _toast('Photo request sent');
+                    _requestAccess(ViewRequestType.photo);
                   },
                 ),
               ),
@@ -463,7 +636,13 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               Padding(
                 padding: EdgeInsets.fromLTRB(14, 380 + top, 14, 0),
                 child: withFeaturedRibbon(
-                  _InfoCard(profile: _p),
+                  _InfoCard(
+                    profile: _p,
+                    nameRequested: _isRequested(ViewRequestType.name),
+                    requestingName:
+                        _requesting.contains(ViewRequestType.name),
+                    onRequestName: () => _requestAccess(ViewRequestType.name),
+                  ),
                   featured: _p.featured,
                 ),
               ),
@@ -501,7 +680,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                         foreground: AppColors.navy,
                         background: Colors.white,
                         borderColor: AppColors.fieldBorder,
-                        onTap: _dontShow,
+                        onTap: _hiding ? null : _dontShow,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -525,7 +704,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   }
 
   Widget _interestButton() {
-    switch (_p.interest) {
+    switch (_interest) {
       case MemberInterest.send:
         return PillButton(
           label: 'Send Interest',
@@ -640,7 +819,14 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            if (_p.phone == null)
+            if (_p.isLocked(ViewRequestType.mobile))
+              RequestAccessButton(
+                type: ViewRequestType.mobile,
+                requested: _isRequested(ViewRequestType.mobile),
+                busy: _requesting.contains(ViewRequestType.mobile),
+                onRequest: () => _requestAccess(ViewRequestType.mobile),
+              )
+            else if (_p.phone == null)
               PillButton(
                 label: 'Upgrade to view',
                 icon: matchIcon(Icons.lock_open_rounded, 'unlock',
@@ -679,7 +865,16 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         iconName: 'horoscope',
         accent: AppColors.coral,
         tint: const Color(0xFFFBF0EE),
-        child: _Rows(_p.horoscope),
+        child: _p.isLocked(ViewRequestType.horoscope)
+            ? LockedSectionBody(
+                type: ViewRequestType.horoscope,
+                message:
+                    '$pr horoscope details are private. Send a request to view them.',
+                requested: _isRequested(ViewRequestType.horoscope),
+                busy: _requesting.contains(ViewRequestType.horoscope),
+                onRequest: () => _requestAccess(ViewRequestType.horoscope),
+              )
+            : _Rows(_p.horoscope),
       ),
       const SizedBox(height: 14),
       _MatchBanner(
@@ -811,16 +1006,21 @@ class _PhotoPager extends StatelessWidget {
     required this.index,
     required this.onPage,
     required this.onRequestPhoto,
+    this.photoRequested = false,
+    this.requestingPhoto = false,
   });
 
   final MemberProfile profile;
   final int index;
   final ValueChanged<int> onPage;
   final VoidCallback onRequestPhoto;
+  final bool photoRequested;
+  final bool requestingPhoto;
 
   @override
   Widget build(BuildContext context) {
     final p = profile;
+    final hidden = p.isLocked(ViewRequestType.photo);
     final count = p.photoUrls.isNotEmpty ? p.photoUrls.length : p.photoCount;
 
     return ClipRRect(
@@ -829,8 +1029,12 @@ class _PhotoPager extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Container(color: AppColors.blueTint),
-          if (p.photoHidden)
-            _HiddenPhoto(onRequest: onRequestPhoto)
+          if (hidden)
+            _HiddenPhoto(
+              onRequest: onRequestPhoto,
+              requested: photoRequested,
+              busy: requestingPhoto,
+            )
           else
             PageView.builder(
               itemCount: count,
@@ -848,7 +1052,7 @@ class _PhotoPager extends StatelessWidget {
                       ),
                     ),
             ),
-          if (!p.photoHidden && count > 0)
+          if (!hidden && count > 0)
             Positioned(
               left: 16,
               bottom: 64,
@@ -877,7 +1081,7 @@ class _PhotoPager extends StatelessWidget {
                 ),
               ),
             ),
-          if (!p.photoHidden && count > 1)
+          if (!hidden && count > 1)
             Positioned(
               right: 16,
               bottom: 70,
@@ -906,8 +1110,14 @@ class _PhotoPager extends StatelessWidget {
 }
 
 class _HiddenPhoto extends StatelessWidget {
-  const _HiddenPhoto({required this.onRequest});
+  const _HiddenPhoto({
+    required this.onRequest,
+    this.requested = false,
+    this.busy = false,
+  });
   final VoidCallback onRequest;
+  final bool requested;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -935,14 +1145,12 @@ class _HiddenPhoto extends StatelessWidget {
                   color: AppColors.navy)),
           const SizedBox(height: 10),
           SizedBox(
-            width: 180,
-            child: PillButton(
-              label: 'Request Photo',
-              icon: matchIcon(Icons.photo_camera_outlined, 'camera',
-                  size: 16, color: Colors.white),
-              foreground: Colors.white,
-              gradient: kTealGradient,
-              onTap: onRequest,
+            width: 200,
+            child: RequestAccessButton(
+              type: ViewRequestType.photo,
+              requested: requested,
+              busy: busy,
+              onRequest: onRequest,
             ),
           ),
         ],
@@ -952,8 +1160,16 @@ class _HiddenPhoto extends StatelessWidget {
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.profile});
+  const _InfoCard({
+    required this.profile,
+    required this.onRequestName,
+    this.nameRequested = false,
+    this.requestingName = false,
+  });
   final MemberProfile profile;
+  final VoidCallback onRequestName;
+  final bool nameRequested;
+  final bool requestingName;
 
   @override
   Widget build(BuildContext context) {
@@ -1004,12 +1220,13 @@ class _InfoCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (p.nameHidden) ...[
-                const SizedBox(width: 6),
-                Semantics(
-                  label: 'Name hidden',
-                  child: matchIcon(Icons.visibility_off_outlined, 'eye_off',
-                      size: 18, color: AppColors.coral),
+              if (p.isLocked(ViewRequestType.name)) ...[
+                const SizedBox(width: 4),
+                HiddenNameButton(
+                  size: 18,
+                  requested: nameRequested,
+                  busy: requestingName,
+                  onRequest: onRequestName,
                 ),
               ],
               if (p.online) ...[

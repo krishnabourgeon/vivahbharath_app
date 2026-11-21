@@ -1,3 +1,4 @@
+import 'package:vivahbharath_app/model/view_request.dart';
 import 'package:vivahbharath_app/services/app_config.dart';
 
 /// Interest state shown on a match card's action button.
@@ -56,10 +57,11 @@ class MatchProfile {
     this.paid = false,
     this.online = false,
     this.shortlisted = false,
-    this.photoRequested = false,
+    this.privacy = ProfilePrivacy.open,
+    Set<ViewRequestType>? requested,
     this.status = InterestStatus.send,
     this.hidden = false,
-  });
+  }) : requested = requested ?? {};
 
   /// Numeric member id used by the API (`matches/{id}/shortlist`, …).
   final int? apiId;
@@ -76,6 +78,10 @@ class MatchProfile {
   final String city;
   final String? photoUrl;
   final bool nameHidden;
+
+  /// What the viewer may see (the `privacy` block). Locked parts get a
+  /// "Request …" button.
+  final ProfilePrivacy privacy;
   final bool verified;
   final bool featured;
 
@@ -87,7 +93,9 @@ class MatchProfile {
 
   // Mutable UI state
   bool shortlisted;
-  bool photoRequested;
+  /// Privacy requests sent to this member that are awaiting a reply.
+  final Set<ViewRequestType> requested;
+  bool get photoRequested => requested.contains(ViewRequestType.photo);
   InterestStatus status;
   bool hidden;
 
@@ -107,6 +115,7 @@ class MatchProfile {
     final online = _bool(j['is_online']) ?? false;
     final interestSent = _bool(j['is_interest_sent']) ?? false;
     final connected = _bool(j['already_connected']) ?? false;
+    final privacy = ProfilePrivacy.fromJson(j['privacy']);
 
     return MatchProfile(
       apiId: apiId,
@@ -115,7 +124,11 @@ class MatchProfile {
           _str(j['member_id']) ??
           (apiId == null ? '' : 'VB$apiId'),
       name: _str(j['name']) ?? 'Member',
-      nameHidden: _bool(j['name_hidden']) ?? false,
+      nameHidden:
+          _bool(j['name_hidden']) ??
+          _bool(j['is_name_hidden']) ??
+          privacy.isLocked(ViewRequestType.name),
+      privacy: privacy,
       online: online,
       lastSeen: online ? 'Online now' : _lastSeen(j['last_seen']),
       age: _int(j['age']),

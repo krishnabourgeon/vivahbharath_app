@@ -7,6 +7,7 @@ import 'package:vivahbharath_app/model/match_profile.dart';
 import 'package:vivahbharath_app/provider/home_provider.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
 import 'package:vivahbharath_app/view/custom/app_icon.dart';
+import 'package:vivahbharath_app/view/custom/interest_actions.dart';
 import 'package:vivahbharath_app/view/custom/responsive.dart';
 import 'package:vivahbharath_app/view/dashboard/dashboard_shell.dart';
 import 'package:vivahbharath_app/view/dashboard/home_drawer.dart';
@@ -676,10 +677,14 @@ class _ProfileCard extends StatelessWidget {
     );
   }
 
-  void _sendInterest(BuildContext context) {
-    if (profile.status == InterestStatus.awaiting || profile.status == InterestStatus.accepted) return;
-    context.read<HomeProvider>().markHomeInterestSent(profile);
-    _toast(context, 'Interest sent to ${_displayName(profile)}');
+  Future<void> _sendInterest(BuildContext context) async {
+    final status = interestStatusOf(profile);
+    if (status == InterestStatus.awaiting || status == InterestStatus.accepted) return;
+    final home = context.read<HomeProvider>();
+    final error = await sendInterestApi(profile.apiId);
+    if (error == null) home.markHomeInterestSent(profile);
+    if (!context.mounted) return;
+    _toast(context, error ?? 'Interest sent to ${_displayName(profile)}');
   }
 
   @override
@@ -690,12 +695,6 @@ class _ProfileCard extends StatelessWidget {
     final online = _isOnline(p);
     final hasPhoto = p.photoUrl != null;
     final details = [p.city, p.profession].where((s) => s.isNotEmpty).join(' · ');
-    final (interestIcon, interestLabel) = switch (p.status) {
-      InterestStatus.send => ('send', 'Send Interest'),
-      InterestStatus.awaiting => ('clock', 'Interest Sent'),
-      InterestStatus.resend => ('send', 'Resend Interest'),
-      InterestStatus.accepted => ('interest_accepted', 'Connected'),
-    };
     return Container(
       width: width,
       padding: const EdgeInsets.all(8),
@@ -782,7 +781,19 @@ class _ProfileCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(details.isEmpty ? ' ' : details, maxLines: 1, overflow: TextOverflow.ellipsis, style: _t(13, FontWeight.w400, AppColors.textMuted)),
           const SizedBox(height: 10),
-          _PillButton(icon: interestIcon, label: interestLabel, fontSize: 15, minHeight: 44, onTap: () => _sendInterest(context)),
+          // Rebuilds when an interest to this member is sent / withdrawn anywhere.
+          ListenableBuilder(
+            listenable: sentInterests,
+            builder: (context, _) {
+              final (interestIcon, interestLabel) = switch (interestStatusOf(p)) {
+                InterestStatus.send => ('send', 'Send Interest'),
+                InterestStatus.awaiting => ('clock', 'Awaiting Response'),
+                InterestStatus.resend => ('send', 'Resend Interest'),
+                InterestStatus.accepted => ('interest_accepted', 'Connected'),
+              };
+              return _PillButton(icon: interestIcon, label: interestLabel, fontSize: 15, minHeight: 44, onTap: () => _sendInterest(context));
+            },
+          ),
         ],
       ),
     );

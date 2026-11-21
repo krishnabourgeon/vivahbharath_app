@@ -6,12 +6,14 @@ import 'package:vivahbharath_app/model/contacts_viewed_you_model.dart';
 import 'package:vivahbharath_app/model/dashboard_model.dart';
 import 'package:vivahbharath_app/model/all_matches_model.dart';
 import 'package:vivahbharath_app/model/dont_show_matches_model.dart';
+import 'package:vivahbharath_app/model/dont_show_model.dart';
 import 'package:vivahbharath_app/model/education_matches_model.dart';
 import 'package:vivahbharath_app/model/error_response_model.dart';
 import 'package:vivahbharath_app/model/family_matches_model.dart';
-import 'package:vivahbharath_app/model/interest_received_all.dart';
-import 'package:vivahbharath_app/model/interest_recevied_model.dart';
-import 'package:vivahbharath_app/model/interest_send_model.dart';
+import 'package:vivahbharath_app/model/inbox_interest_model.dart';
+// import 'package:vivahbharath_app/model/interest_received_all.dart';
+// import 'package:vivahbharath_app/model/interest_recevied_model.dart';
+//import 'package:vivahbharath_app/model/interest_send_model.dart';
 import 'package:vivahbharath_app/model/match_profile.dart';
 import 'package:vivahbharath_app/model/new_matches_model.dart';
 import 'package:vivahbharath_app/model/online_matches_model.dart';
@@ -20,14 +22,16 @@ import 'package:vivahbharath_app/model/privacy_settings_model.dart';
 import 'package:vivahbharath_app/model/profession_matches_model.dart';
 import 'package:vivahbharath_app/model/religion_match_model.dart';
 import 'package:vivahbharath_app/model/request_model.dart';
-import 'package:vivahbharath_app/model/request_send_model.dart';
 import 'package:vivahbharath_app/model/respond_interest_model.dart';
 import 'package:vivahbharath_app/model/respond_request_model.dart';
+import 'package:vivahbharath_app/model/send_interest_model.dart';
+import 'package:vivahbharath_app/model/send_request_model.dart';
 import 'package:vivahbharath_app/model/shortlist_model.dart';
 import 'package:vivahbharath_app/model/shortlisted_by_you_model.dart';
 import 'package:vivahbharath_app/model/shortlisted_you_model.dart';
 import 'package:vivahbharath_app/model/viewed_by_me_model.dart';
 import 'package:vivahbharath_app/model/viewed_me_model.dart';
+import 'package:vivahbharath_app/model/withdraw_model.dart';
 import 'package:vivahbharath_app/services/provider_helper_class.dart';
 
 class HomeProvider extends ProviderHelperClass with ChangeNotifier {
@@ -35,18 +39,18 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
   AllMatchesModel? allMatchesModel;
   NewMatchesModel? newMatchesModel;
   ViewedByMeModel? viewedByMeModel;
-  ViewedMeModel? viewedMeModel;
-  ShortlistedByYouModel? shortlistedByYouModel;
-  ShortlistedYouModel? shortlistedYouModel;
+  ViewedMeMatchesModel? viewedMeModel;
+  ShortlistedByYouMatchesModel? shortlistedByYouModel;
+  ShortlistedByYouMatchesModel? shortlistedYouMatchesModel;
   ChatModel? chatModel;
-  InterestReceivedAllModel? interestReceivedAllModel;
-  InterestReceivedModel? interestReceivedModel;
-  InterestSentModel? interestSendModel;
+  // InterestReceivedAllModel? interestReceivedAllModel;
+  // InterestReceivedModel? interestReceivedModel;
+  //InterestSentModel? interestSendModel;
+  InboxInterestModel? inboxInterestModel;
   RespondInterestModel? respondInterestModel;
   RequestModel? requestModel;
   RespondRequestModel? respondRequestModel;
   ShortListModel? shortListModel;
-  RequestSendModel? requestSendModel;
   ContactsViewedByMeModel? contactsViewedByMeModel;
   ContactsViewedYouModel? contactsViewedYouModel;
   OnlineMatchesModel? onlineMatchesModel;
@@ -55,6 +59,11 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
   FamilyMatchesModel? familyMatchesModel;
   ReligionMatchesModel? religionMatchesModel;
   DontShowMatchesModel? dontshowMatchesModel;
+  DontShowModel? dontShowModel;
+  SendInterestModel? sendInterestModel;
+  WithdrawModel? withdrawModel;
+  SendRequestModel? sendRequestModel;
+
 
   @override
   void updateLoadState(LoaderState state) {
@@ -209,12 +218,12 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
     }
   }
 
-  Future<void> getViewedMe() async {
+  Future<void> getViewedMeMatches() async {
     updateLoadState(LoaderState.loading);
     final network = await CommonFunctions.checkInternetConnection();
     if (network) {
       try {
-        var res = await serviceConfig.getViewedMe();
+        var res = await serviceConfig.getViewedMeMatches();
         if (res.isValue) {
           viewedMeModel = res.asValue!.value;
           updateLoadState(LoaderState.loaded);
@@ -256,7 +265,7 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
     final network = await CommonFunctions.checkInternetConnection();
     if (network) {
       try {
-        var res = await serviceConfig.getShortlistedByYou();
+        var res = await serviceConfig.getShortlistedByYouMatches();
         if (res.isValue) {
           shortlistedByYouModel = res.asValue!.value;
           updateLoadState(LoaderState.loaded);
@@ -277,9 +286,9 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
     final network = await CommonFunctions.checkInternetConnection();
     if (network) {
       try {
-        var res = await serviceConfig.getShortlistedYou();
+        var res = await serviceConfig.getShortlistedYouMatches();
         if (res.isValue) {
-          shortlistedYouModel = res.asValue!.value;
+          shortlistedYouMatchesModel = res.asValue!.value;
           updateLoadState(LoaderState.loaded);
 
           notifyListeners();
@@ -314,131 +323,131 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
     }
   }
 
-  Future<void> interestReceivedAll() async {
-    updateLoadState(LoaderState.loading);
-    final network = await CommonFunctions.checkInternetConnection();
-    if (network) {
-      try {
-        var res = await serviceConfig.interestReceivedAll();
-        if (res.isValue) {
-          interestReceivedAllModel = res.asValue!.value;
-          updateLoadState(LoaderState.loaded);
+  // Future<void> interestReceivedAll() async {
+  //   updateLoadState(LoaderState.loading);
+  //   final network = await CommonFunctions.checkInternetConnection();
+  //   if (network) {
+  //     try {
+  //       var res = await serviceConfig.interestReceivedAll();
+  //       if (res.isValue) {
+  //         interestReceivedAllModel = res.asValue!.value;
+  //         updateLoadState(LoaderState.loaded);
 
-          notifyListeners();
-        } else {
-          updateLoadState(LoaderState.loaded);
-        }
-      } catch (e) {
-        debugPrint('exception in interest received all: $e');
-        updateLoadState(LoaderState.loaded);
-      }
-    }
-  }
+  //         notifyListeners();
+  //       } else {
+  //         updateLoadState(LoaderState.loaded);
+  //       }
+  //     } catch (e) {
+  //       debugPrint('exception in interest received all: $e');
+  //       updateLoadState(LoaderState.loaded);
+  //     }
+  //   }
+  // }
 
-  Future<void> interestReceived(int status) async {
-    updateLoadState(LoaderState.loading);
-    final network = await CommonFunctions.checkInternetConnection();
-    if (network) {
-      try {
-        var res = await serviceConfig.interestReceived(status);
-        if (res.isValue) {
-          interestReceivedModel = res.asValue!.value;
-          updateLoadState(LoaderState.loaded);
+  // Future<void> interestReceived(int status) async {
+  //   updateLoadState(LoaderState.loading);
+  //   final network = await CommonFunctions.checkInternetConnection();
+  //   if (network) {
+  //     try {
+  //       var res = await serviceConfig.interestReceived(status);
+  //       if (res.isValue) {
+  //         interestReceivedModel = res.asValue!.value;
+  //         updateLoadState(LoaderState.loaded);
 
-          notifyListeners();
-        } else {
-          updateLoadState(LoaderState.loaded);
-        }
-      } catch (e) {
-        debugPrint('exception in interest received: $e');
-        updateLoadState(LoaderState.loaded);
-      }
-    }
-  }
+  //         notifyListeners();
+  //       } else {
+  //         updateLoadState(LoaderState.loaded);
+  //       }
+  //     } catch (e) {
+  //       debugPrint('exception in interest received: $e');
+  //       updateLoadState(LoaderState.loaded);
+  //     }
+  //   }
+  // }
 
-  Future<void> interestSend(int status) async {
-    updateLoadState(LoaderState.loading);
-    final network = await CommonFunctions.checkInternetConnection();
-    if (network) {
-      try {
-        var res = await serviceConfig.interestSend(status);
-        if (res.isValue) {
-          interestSendModel = res.asValue!.value;
-          updateLoadState(LoaderState.loaded);
+  // Future<void> interestSend(int status) async {
+  //   updateLoadState(LoaderState.loading);
+  //   final network = await CommonFunctions.checkInternetConnection();
+  //   if (network) {
+  //     try {
+  //       var res = await serviceConfig.interestSend(status);
+  //       if (res.isValue) {
+  //         interestSendModel = res.asValue!.value;
+  //         updateLoadState(LoaderState.loaded);
 
-          notifyListeners();
-        } else {
-          updateLoadState(LoaderState.loaded);
-        }
-      } catch (e) {
-        debugPrint('exception in interest send: $e');
-        updateLoadState(LoaderState.loaded);
-      }
-    }
-  }
+  //         notifyListeners();
+  //       } else {
+  //         updateLoadState(LoaderState.loaded);
+  //       }
+  //     } catch (e) {
+  //       debugPrint('exception in interest send: $e');
+  //       updateLoadState(LoaderState.loaded);
+  //     }
+  //   }
+  // }
 
-  Future<void> respondInterest(int interestid, String status) async {
-    updateLoadState(LoaderState.loading);
-    final network = await CommonFunctions.checkInternetConnection();
-    if (network) {
-      try {
-        var res = await serviceConfig.respondInterest(interestid, status);
-        if (res.isValue) {
-          respondInterestModel = res.asValue!.value;
-          updateLoadState(LoaderState.loaded);
+  // Future<void> respondInterest(int interestid, String status) async {
+  //   updateLoadState(LoaderState.loading);
+  //   final network = await CommonFunctions.checkInternetConnection();
+  //   if (network) {
+  //     try {
+  //       var res = await serviceConfig.respondInterest(interestid, status);
+  //       if (res.isValue) {
+  //         respondInterestModel = res.asValue!.value;
+  //         updateLoadState(LoaderState.loaded);
 
-          notifyListeners();
-        } else {
-          updateLoadState(LoaderState.loaded);
-        }
-      } catch (e) {
-        debugPrint('exception in interest respond: $e');
-        updateLoadState(LoaderState.loaded);
-      }
-    }
-  }
+  //         notifyListeners();
+  //       } else {
+  //         updateLoadState(LoaderState.loaded);
+  //       }
+  //     } catch (e) {
+  //       debugPrint('exception in interest respond: $e');
+  //       updateLoadState(LoaderState.loaded);
+  //     }
+  //   }
+  // }
 
-  Future<void> request(String type) async {
-    updateLoadState(LoaderState.loading);
-    final network = await CommonFunctions.checkInternetConnection();
-    if (network) {
-      try {
-        var res = await serviceConfig.request(type);
-        if (res.isValue) {
-          requestModel = res.asValue!.value;
-          updateLoadState(LoaderState.loaded);
+  // Future<void> request(String type) async {
+  //   updateLoadState(LoaderState.loading);
+  //   final network = await CommonFunctions.checkInternetConnection();
+  //   if (network) {
+  //     try {
+  //       var res = await serviceConfig.request(type);
+  //       if (res.isValue) {
+  //         requestModel = res.asValue!.value;
+  //         updateLoadState(LoaderState.loaded);
 
-          notifyListeners();
-        } else {
-          updateLoadState(LoaderState.loaded);
-        }
-      } catch (e) {
-        debugPrint('exception in request: $e');
-        updateLoadState(LoaderState.loaded);
-      }
-    }
-  }
+  //         notifyListeners();
+  //       } else {
+  //         updateLoadState(LoaderState.loaded);
+  //       }
+  //     } catch (e) {
+  //       debugPrint('exception in request: $e');
+  //       updateLoadState(LoaderState.loaded);
+  //     }
+  //   }
+  // }
 
-  Future<void> respondRequest(int requestid, String status) async {
-    updateLoadState(LoaderState.loading);
-    final network = await CommonFunctions.checkInternetConnection();
-    if (network) {
-      try {
-        var res = await serviceConfig.requestRespond(requestid, status);
-        if (res.isValue) {
-          respondRequestModel = res.asValue!.value;
-          updateLoadState(LoaderState.loaded);
+  // Future<void> respondRequest(int requestid, String status) async {
+  //   updateLoadState(LoaderState.loading);
+  //   final network = await CommonFunctions.checkInternetConnection();
+  //   if (network) {
+  //     try {
+  //       var res = await serviceConfig.requestRespond(requestid, status);
+  //       if (res.isValue) {
+  //         respondRequestModel = res.asValue!.value;
+  //         updateLoadState(LoaderState.loaded);
 
-          notifyListeners();
-        } else {
-          updateLoadState(LoaderState.loaded);
-        }
-      } catch (e) {
-        debugPrint('exception in request respond: $e');
-        updateLoadState(LoaderState.loaded);
-      }
-    }
-  }
+  //         notifyListeners();
+  //       } else {
+  //         updateLoadState(LoaderState.loaded);
+  //       }
+  //     } catch (e) {
+  //       debugPrint('exception in request respond: $e');
+  //       updateLoadState(LoaderState.loaded);
+  //     }
+  //   }
+  // }
 
   Future<void> shortlist(int id) async {
     updateLoadState(LoaderState.loading);
@@ -462,14 +471,14 @@ class HomeProvider extends ProviderHelperClass with ChangeNotifier {
     }
   }
 
-  Future<void> requestSend(String type) async {
+  Future<void> requestSend(String requesttype,int receiverid) async {
     updateLoadState(LoaderState.loading);
     final network = await CommonFunctions.checkInternetConnection();
     if (network) {
       try {
-        var res = await serviceConfig.requestSend(type);
+        var res = await serviceConfig.requestSend(requesttype, receiverid);
         if (res.isValue) {
-          requestSendModel = res.asValue!.value;
+          sendRequestModel = res.asValue!.value;
           updateLoadState(LoaderState.loaded);
 
           notifyListeners();
@@ -655,18 +664,117 @@ Future<void> onlineMatches() async {
           updateLoadState(LoaderState.loaded);
         }
       } catch (e) {
-        debugPrint('exception in religion matches: $e');
+        debugPrint("exception in don't show matches: $e");
         updateLoadState(LoaderState.loaded);
         
       }
     }
   }
 
+  Future<void> inboxMatches(String direction, String status) async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.inboxInterest(direction, status);
+        if(res.isValue){
+          inboxInterestModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+          notifyListeners();
+        } else {
+          updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint("exception in inbox interest: $e");
+        updateLoadState(LoaderState.loaded);
+      }
+    }
+  }
 
 
-  
 
-  
+  Future<void> dontShow(String userid) async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.dontShow(userid);
+        if(res.isValue){
+          dontShowModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+          notifyListeners();
+        } else {
+          updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in dontshow : $e');
+        updateLoadState(LoaderState.loaded);
+      }
+    }
+  }
+
+
+  Future<void> sendInterest(int receiverid) async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.sendInterest(receiverid);
+        if(res.isValue){
+          sendInterestModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+          notifyListeners();
+        } else {
+           updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in dontshow : $e');
+        updateLoadState(LoaderState.loaded);
+      }
+    }
+  }
+
+  Future<void> respondInterest(String status, String userid) async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.respondInterest(status, userid);
+        if(res.isValue){
+          respondInterestModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+          notifyListeners();
+        } else {
+           updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in dontshow : $e');
+        updateLoadState(LoaderState.loaded);
+      }
+    }
+  } 
+
+
+    Future<void> withdraw(String withdraw) async {
+    updateLoadState(LoaderState.loading);
+    final network = await CommonFunctions.checkInternetConnection();
+    if(network){
+      try{
+        var res = await serviceConfig.withdraw(withdraw);
+        if(res.isValue){
+          withdrawModel = res.asValue!.value;
+          updateLoadState(LoaderState.loaded);
+          notifyListeners();
+        } else {
+           updateLoadState(LoaderState.loaded);
+        }
+      } catch (e) {
+        debugPrint('exception in dontshow : $e');
+        updateLoadState(LoaderState.loaded);
+      }
+    }
+  } 
+
 
   PrivacySettingsModel? privacySettingsModel;
   String? privacySettingsError;

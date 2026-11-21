@@ -5,7 +5,10 @@ import 'package:vivahbharath_app/model/match_profile.dart';
 import 'package:vivahbharath_app/provider/matches_provider.dart';
 import 'package:vivahbharath_app/provider/search_provider.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
+import 'package:vivahbharath_app/view/custom/interest_actions.dart';
+import 'package:vivahbharath_app/model/view_request.dart';
 import 'package:vivahbharath_app/view/custom/profile_badges.dart';
+import 'package:vivahbharath_app/view/custom/request_access.dart';
 import 'profile_detail_screen.dart';
 
 export 'package:vivahbharath_app/model/match_profile.dart';
@@ -23,88 +26,88 @@ const _kSkin = Color(0xFFF6C3A0);
 const _kNeck = Color(0xFFEAB08A);
 const _kHair = Color(0xFF4A2C22);
 
-/// Design sample data (still used by the search results screen).
-List<MatchProfile> sampleMatches() => [
-  MatchProfile(
-    id: 'VM2760',
-    name: 'Raxxxxxxxx',
-    nameHidden: true,
-    lastSeen: 'Last seen 4 hours ago',
-    age: 36,
-    height: '5\'8"',
-    caste: 'Nair',
-    education: 'Bachelors Degree',
-    profession: 'Software Engineer',
-    city: 'Kozhikode',
-    featured: true,
-    paid: true,
-    online: true,
-    shortlisted: true,
-    photoRequested: true,
-    status: InterestStatus.awaiting,
-  ),
-  MatchProfile(
-    id: 'VBM26532747M',
-    name: 'Harikrishna',
-    lastSeen: 'Last seen 2 hours ago',
-    age: 33,
-    height: '5\'7"',
-    caste: 'Nair',
-    education: 'Bachelors Degree',
-    profession: 'Software Engineer',
-    city: 'Kozhikode',
-    featured: true,
-  ),
-  MatchProfile(
-    id: 'VM2382',
-    name: 'Rahul CK',
-    lastSeen: 'Last seen 1 month ago',
-    age: 26,
-    height: '5\'4"',
-    caste: 'Thiyya',
-    education: 'Master Degree',
-    profession: 'Software Developer',
-    city: 'Kozhikode',
-    shortlisted: true,
-    photoRequested: true,
-    status: InterestStatus.resend,
-  ),
-  MatchProfile(
-    id: 'VM4858',
-    name: 'Arun V',
-    lastSeen: 'Recently no activity',
-    age: 23,
-    height: '5\'10"',
-    caste: 'Nair',
-    education: 'Bachelors Degree',
-    profession: 'Software Engineer',
-    city: 'Kozhikode',
-    status: InterestStatus.awaiting,
-  ),
-  MatchProfile(
-    id: 'VBM26339257M',
-    name: 'Anirudh',
-    lastSeen: 'Last seen 1 month ago',
-    age: 26,
-    height: '5\'2"',
-    caste: 'Nair',
-    education: 'Bachelors Degree',
-    profession: 'Software Engineer',
-    city: 'Kozhikode',
-  ),
-  MatchProfile(
-    id: 'VBM26932389M',
-    name: 'Priyesh',
-    lastSeen: 'Last seen 1 month ago',
-    age: 41,
-    height: '5\'9"',
-    caste: 'Nair',
-    education: 'Master Degree',
-    profession: 'Teacher',
-    city: 'Kozhikode',
-    hidden: true,
-  ),
-];
+// /// Design sample data (still used by the search results screen).
+// List<MatchProfile> sampleMatches() => [
+//   MatchProfile(
+//     id: 'VM2760',
+//     name: 'Raxxxxxxxx',
+//     nameHidden: true,
+//     lastSeen: 'Last seen 4 hours ago',
+//     age: 36,
+//     height: '5\'8"',
+//     caste: 'Nair',
+//     education: 'Bachelors Degree',
+//     profession: 'Software Engineer',
+//     city: 'Kozhikode',
+//     featured: true,
+//     paid: true,
+//     online: true,
+//     shortlisted: true,
+//     photoRequested: true,
+//     status: InterestStatus.awaiting,
+//   ),
+//   MatchProfile(
+//     id: 'VBM26532747M',
+//     name: 'Harikrishna',
+//     lastSeen: 'Last seen 2 hours ago',
+//     age: 33,
+//     height: '5\'7"',
+//     caste: 'Nair',
+//     education: 'Bachelors Degree',
+//     profession: 'Software Engineer',
+//     city: 'Kozhikode',
+//     featured: true,
+//   ),
+//   MatchProfile(
+//     id: 'VM2382',
+//     name: 'Rahul CK',
+//     lastSeen: 'Last seen 1 month ago',
+//     age: 26,
+//     height: '5\'4"',
+//     caste: 'Thiyya',
+//     education: 'Master Degree',
+//     profession: 'Software Developer',
+//     city: 'Kozhikode',
+//     shortlisted: true,
+//     photoRequested: true,
+//     status: InterestStatus.resend,
+//   ),
+//   MatchProfile(
+//     id: 'VM4858',
+//     name: 'Arun V',
+//     lastSeen: 'Recently no activity',
+//     age: 23,
+//     height: '5\'10"',
+//     caste: 'Nair',
+//     education: 'Bachelors Degree',
+//     profession: 'Software Engineer',
+//     city: 'Kozhikode',
+//     status: InterestStatus.awaiting,
+//   ),
+//   MatchProfile(
+//     id: 'VBM26339257M',
+//     name: 'Anirudh',
+//     lastSeen: 'Last seen 1 month ago',
+//     age: 26,
+//     height: '5\'2"',
+//     caste: 'Nair',
+//     education: 'Bachelors Degree',
+//     profession: 'Software Engineer',
+//     city: 'Kozhikode',
+//   ),
+//   MatchProfile(
+//     id: 'VBM26932389M',
+//     name: 'Priyesh',
+//     lastSeen: 'Last seen 1 month ago',
+//     age: 41,
+//     height: '5\'9"',
+//     caste: 'Nair',
+//     education: 'Master Degree',
+//     profession: 'Teacher',
+//     city: 'Kozhikode',
+//     hidden: true,
+//   ),
+// ];
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Screen
@@ -236,7 +239,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.navy,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        duration: const Duration(milliseconds: 3500),
+        duration: const Duration(seconds: 5),
+        // A snackbar with an action (Undo) stays open by default.
+        persist: false,
         content: Text(msg, style: const TextStyle(fontSize: 13)),
         action: onUndo == null
             ? null
@@ -259,19 +264,38 @@ class _MatchesScreenState extends State<MatchesScreen> {
     }
   }
 
-  void _sendInterest(MatchProfile p) {
-    _mp.markInterestSent(p);
-    _toast('Interest sent to ${p.name}');
+  Future<void> _sendViewRequest(MatchProfile p, ViewRequestType t) async {
+    final error = await _mp.sendViewRequest(p, t);
+    if (!mounted) return;
+    _toast(error ?? '${t.label} request sent to ${p.name}');
   }
 
-  void _hide(MatchProfile p) {
-    _mp.hide(p);
-    _toast('Hidden from your matches', onUndo: () => _mp.unhide(p));
+  Future<void> _sendInterest(MatchProfile p) async {
+    final status = interestStatusOf(p);
+    if (status == InterestStatus.awaiting ||
+        status == InterestStatus.accepted) {
+      return;
+    }
+    final error = await sendInterestApi(p.apiId);
+    if (error == null) _mp.markInterestSent(p);
+    if (!mounted) return;
+    _toast(error ?? 'Interest sent to ${p.name}');
   }
 
-  void _unhide(MatchProfile p) {
-    _mp.unhide(p);
-    _toast('${p.name} is back in your matches');
+  Future<void> _hide(MatchProfile p) async {
+    final error = await _mp.setHidden(p, hide: true);
+    if (!mounted) return;
+    if (error != null) {
+      _toast(error);
+    } else {
+      _toast('Hidden from your matches', onUndo: () => _unhide(p));
+    }
+  }
+
+  Future<void> _unhide(MatchProfile p) async {
+    final error = await _mp.setHidden(p, hide: false);
+    if (!mounted) return;
+    _toast(error ?? '${p.name} is back in your matches');
   }
 
   Future<void> _openMore() async {
@@ -410,6 +434,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
                           onHide: () => _hide(p),
                           onUnhide: () => _unhide(p),
                           onInterest: () => _sendInterest(p),
+                          onRequest: (t) => _sendViewRequest(p, t),
+                          isRequesting: (t) => mp.isRequesting(p, t),
                           onShare: () {
                             /* TODO */
                           },
@@ -421,9 +447,20 @@ class _MatchesScreenState extends State<MatchesScreen> {
                           },
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => const ProfileDetailScreen(),
+                              builder: (_) => ProfileDetailScreen(
+                                profile: MemberProfile.fromMatch(p),
+                                onDontShow: () =>
+                                    _mp.setHidden(p, hide: true),
+                                onRequestAccess: (t) async {
+                                  final error = await _mp.sendViewRequest(
+                                    p,
+                                    t,
+                                  );
+                                  return error;
+                                },
+                              ),
                             ),
-                          ), // TODO: pass the member's data
+                          ),
                         ),
                         const SizedBox(height: 18),
                       ],
@@ -763,10 +800,19 @@ class MatchCard extends StatelessWidget {
     required this.onWhatsApp,
     required this.onTap,
     this.dontShowMode = false,
+    this.onRequest,
+    this.isRequesting,
   });
 
   final MatchProfile profile;
   final bool dontShowMode;
+
+  /// Sends a privacy request (name / photo …) for a locked part of the card.
+  /// When null the card shows no request buttons.
+  final void Function(ViewRequestType type)? onRequest;
+
+  /// Whether a request of that type is in flight (shows a spinner).
+  final bool Function(ViewRequestType type)? isRequesting;
   final VoidCallback onShortlist;
   final VoidCallback onHide;
   final VoidCallback onUnhide;
@@ -797,11 +843,18 @@ class MatchCard extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _Photo(profile: p, onShortlist: onShortlist),
+                      _Photo(
+                        profile: p,
+                        onShortlist: onShortlist,
+                        onRequest: onRequest,
+                        isRequesting: isRequesting,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: _Info(
                           profile: p,
+                          onRequest: onRequest,
+                          isRequesting: isRequesting,
                           onShare: onShare,
                           onCall: onCall,
                           onWhatsApp: onWhatsApp,
@@ -843,7 +896,14 @@ class MatchCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Expanded(child: _statusButton(p)),
+                      // Rebuilds when an interest to this member is sent /
+                      // withdrawn on any screen.
+                      Expanded(
+                        child: ListenableBuilder(
+                          listenable: sentInterests,
+                          builder: (_, _) => _statusButton(p),
+                        ),
+                      ),
                     ],
                   ),
               ],
@@ -857,7 +917,7 @@ class MatchCard extends StatelessWidget {
   }
 
   Widget _statusButton(MatchProfile p) {
-    switch (p.status) {
+    switch (interestStatusOf(p)) {
       case InterestStatus.send:
         return PillButton(
           label: 'Send interest',
@@ -923,14 +983,23 @@ const kTealGradient = LinearGradient(
 );
 
 class _Photo extends StatelessWidget {
-  const _Photo({required this.profile, required this.onShortlist});
+  const _Photo({
+    required this.profile,
+    required this.onShortlist,
+    this.onRequest,
+    this.isRequesting,
+  });
 
   final MatchProfile profile;
   final VoidCallback onShortlist;
+  final void Function(ViewRequestType type)? onRequest;
+  final bool Function(ViewRequestType type)? isRequesting;
 
   @override
   Widget build(BuildContext context) {
     final p = profile;
+    const photo = ViewRequestType.photo;
+    final photoLocked = p.privacy.isLocked(photo);
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Container(
@@ -991,44 +1060,17 @@ class _Photo extends StatelessWidget {
               ),
             ),
 
-            // Photo request pending
-            if (p.photoRequested)
+            // Hidden photo: "Request Photo", then "Awaiting Response"
+            if (p.photoRequested || (photoLocked && onRequest != null))
               Positioned(
                 left: 6,
                 right: 6,
                 bottom: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.navy.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      matchIcon(
-                        Icons.camera_alt_outlined,
-                        'camera',
-                        size: 12,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 4),
-                      const Expanded(
-                        child: Text(
-                          'Awaiting Response',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                child: RequestAccessChip(
+                  type: photo,
+                  requested: p.photoRequested,
+                  busy: isRequesting?.call(photo) ?? false,
+                  onRequest: () => onRequest?.call(photo),
                 ),
               ),
           ],
@@ -1044,12 +1086,16 @@ class _Info extends StatelessWidget {
     required this.onShare,
     required this.onCall,
     required this.onWhatsApp,
+    this.onRequest,
+    this.isRequesting,
   });
 
   final MatchProfile profile;
   final VoidCallback onShare;
   final VoidCallback onCall;
   final VoidCallback onWhatsApp;
+  final void Function(ViewRequestType type)? onRequest;
+  final bool Function(ViewRequestType type)? isRequesting;
 
   @override
   Widget build(BuildContext context) {
@@ -1077,7 +1123,14 @@ class _Info extends StatelessWidget {
                 ),
               ),
             ),
-            if (p.nameHidden) ...[
+            if (p.nameHidden && onRequest != null) ...[
+              const SizedBox(width: 4),
+              HiddenNameButton(
+                requested: p.requested.contains(ViewRequestType.name),
+                busy: isRequesting?.call(ViewRequestType.name) ?? false,
+                onRequest: () => onRequest!(ViewRequestType.name),
+              ),
+            ] else if (p.nameHidden) ...[
               const SizedBox(width: 6),
               Semantics(
                 label: 'Name hidden',

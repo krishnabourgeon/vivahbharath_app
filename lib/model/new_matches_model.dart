@@ -4,93 +4,142 @@
 
 import 'dart:convert';
 
-NewMatchesModel newMatchesModelFromJson(String str) =>
-    NewMatchesModel.fromJson(json.decode(str));
+NewMatchesModel newMatchesModelFromJson(String str) => NewMatchesModel.fromJson(json.decode(str));
 
-String newMatchesModelToJson(NewMatchesModel data) =>
-    json.encode(data.toJson());
+String newMatchesModelToJson(NewMatchesModel data) => json.encode(data.toJson());
 
 class NewMatchesModel {
-  List<Match>? matches;
-  int? offset;
-  int? limit;
-  int? count;
+    List<Match> matches;
+    int offset;
+    int limit;
+    int count;
 
-  NewMatchesModel({
-    this.matches,
-    this.offset,
-    this.limit,
-    this.count,
-  });
+    NewMatchesModel({
+        required this.matches,
+        required this.offset,
+        required this.limit,
+        required this.count,
+    });
 
-  factory NewMatchesModel.fromJson(Map<String, dynamic> json) =>
-      NewMatchesModel(
-        matches: json["matches"] == null
-            ? null
-            : List<Match>.from(json["matches"].map((x) => Match.fromJson(x))),
+    factory NewMatchesModel.fromJson(Map<String, dynamic> json) => NewMatchesModel(
+        matches: List<Match>.from(json["matches"].map((x) => Match.fromJson(x))),
         offset: json["offset"],
         limit: json["limit"],
         count: json["count"],
-      );
+    );
 
-  Map<String, dynamic> toJson() => {
-        "matches": matches == null
-            ? null
-            : List<dynamic>.from(matches!.map((x) => x.toJson())),
+    Map<String, dynamic> toJson() => {
+        "matches": List<dynamic>.from(matches.map((x) => x.toJson())),
         "offset": offset,
         "limit": limit,
         "count": count,
-      };
+    };
 }
 
 class Match {
-  int? id;
-  String? name;
-  int? age;
-  String? height;
-  String? motherTongue;
-  dynamic community;
-  String? location;
-  dynamic imageUrl;
-  dynamic interestStatus;
-  bool? alreadyConnected;
+    int id;
+    String name;
+    bool isNameHidden;
+    int age;
+    String? height;
+    String motherTongue;
+    String? community;
+    String location;
+    String? imageUrl;
+    bool isPhotoHidden;
+    dynamic interestStatus;
+    bool alreadyConnected;
+    Privacy privacy;
 
-  Match({
-    this.id,
-    this.name,
-    this.age,
-    this.height,
-    this.motherTongue,
-    this.community,
-    this.location,
-    this.imageUrl,
-    this.interestStatus,
-    this.alreadyConnected,
-  });
+    Match({
+        required this.id,
+        required this.name,
+        required this.isNameHidden,
+        required this.age,
+        required this.height,
+        required this.motherTongue,
+        required this.community,
+        required this.location,
+        required this.imageUrl,
+        required this.isPhotoHidden,
+        required this.interestStatus,
+        required this.alreadyConnected,
+        required this.privacy,
+    });
 
-  factory Match.fromJson(Map<String, dynamic> json) => Match(
+    factory Match.fromJson(Map<String, dynamic> json) => Match(
         id: json["id"],
         name: json["name"],
+        isNameHidden: json["is_name_hidden"],
         age: json["age"],
         height: json["height"],
         motherTongue: json["mother_tongue"],
         community: json["community"],
         location: json["location"],
         imageUrl: json["image_url"],
+        isPhotoHidden: json["is_photo_hidden"],
         interestStatus: json["interest_status"],
         alreadyConnected: json["already_connected"],
-      );
+        privacy: Privacy.fromJson(json["privacy"]),
+    );
 
-  Map<String, dynamic> toJson() => {
+    Map<String, dynamic> toJson() => {
         "id": id,
         "name": name,
+        "is_name_hidden": isNameHidden,
         "age": age,
         "height": height,
         "mother_tongue": motherTongue,
         "community": community,
         "location": location,
         "image_url": imageUrl,
+        "is_photo_hidden": isPhotoHidden,
         "interest_status": interestStatus,
         "already_connected": alreadyConnected,
-      };
+        "privacy": privacy.toJson(),
+    };
+}
+
+class Privacy {
+    bool hideName;
+    bool hidePhoto;
+    bool hideHoroscope;
+    bool hideMobile;
+    bool canViewName;
+    bool canViewPhoto;
+    bool canViewHoroscope;
+    bool canViewMobile;
+
+    Privacy({
+        required this.hideName,
+        required this.hidePhoto,
+        required this.hideHoroscope,
+        required this.hideMobile,
+        required this.canViewName,
+        required this.canViewPhoto,
+        required this.canViewHoroscope,
+        required this.canViewMobile,
+    });
+
+    factory Privacy.fromJson(Map<String, dynamic> json) => Privacy(
+        hideName: json["hide_name"],
+        hidePhoto: json["hide_photo"],
+        hideHoroscope: json["hide_horoscope"],
+        hideMobile: json["hide_mobile"],
+        canViewName: json["can_view_name"],
+        canViewPhoto: json["can_view_photo"],
+        canViewHoroscope: json["can_view_horoscope"],
+        canViewMobile: json["can_view_mobile"],
+    );
+
+    Map<String, dynamic> toJson() => {
+        "hide_name": hideName,
+        "hide_photo": hidePhoto,
+        "hide_horoscope": hideHoroscope,
+        "hide_mobile": hideMobile,
+        "can_view_name": canViewName,
+        "can_view_photo": canViewPhoto,
+        "can_view_horoscope": canViewHoroscope,
+        "can_view_mobile": canViewMobile,
+    };
 }

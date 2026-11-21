@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:vivahbharath_app/model/view_request.dart';
 import 'package:vivahbharath_app/provider/matches_provider.dart';
 import 'package:vivahbharath_app/provider/search_provider.dart';
 import 'package:vivahbharath_app/view/custom/app_colors.dart';
+import 'package:vivahbharath_app/view/custom/interest_actions.dart';
 import 'package:vivahbharath_app/view/dashboard/matche_screen.dart';
 import 'profile_detail_screen.dart';
 import 'search_screen.dart';
@@ -100,6 +102,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     } finally {
       if (mounted && req == _request) setState(() => _loading = false);
     }
+    if (mounted && req == _request) _fillTab();
   }
 
   Future<void> _loadMore() async {
@@ -124,6 +127,32 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     } finally {
       if (mounted && req == _request) setState(() => _loadingMore = false);
     }
+    if (mounted && req == _request) _fillTab();
+  }
+
+  Future<void> _sendViewRequest(MatchProfile p, ViewRequestType t) async {
+    final error = await context.read<MatchesProvider>().sendViewRequest(p, t);
+    if (!mounted) return;
+    setState(() {});
+    _toast(error ?? '${t.label} request sent to ${p.name}');
+  }
+
+  /// Hides / unhides [p] via `profiles/{id}/dont-show`.
+  Future<void> _setHidden(MatchProfile p, {required bool hide}) async {
+    final error =
+        await context.read<MatchesProvider>().setHidden(p, hide: hide);
+    if (!mounted) return;
+    if (error != null) {
+      _toast(error);
+      return;
+    }
+    setState(() => p.hidden = hide);
+    if (hide) {
+      _toast('Hidden from your results',
+          onUndo: () => _setHidden(p, hide: false));
+    } else {
+      _toast('${p.name} is back in your results');
+    }
   }
 
   Future<void> _toggleShortlist(MatchProfile p) async {
@@ -139,11 +168,78 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
   bool get _isDontShow => _tab == MatchTab.dontShow;
   int get _hiddenCount => _profiles.where((p) => p.hidden).length;
-  List<MatchProfile> get _visible => _profiles
-      .where((p) => _isDontShow ? p.hidden : !p.hidden)
-      .toList(growable: false);
+
+  /// Tabs that narrow the search results to the members of a `matches/*` list.
+  bool get _isListTab => _tab != MatchTab.all && !_isDontShow;
+
+  /// Tab lists already (re)fetched while this screen is open.
+  final Set<MatchTab> _tabsFetched = {};
+  final Set<MatchTab> _tabsLoading = {};
+  bool get _tabLoading => _tabsLoading.contains(_tab);
+
+  /// Search results for the current tab: "All" shows every result, the other
+  /// tabs only the results that are also in that tab's list.
+  List<MatchProfile> _visibleFor(MatchesProvider mp) {
+    if (_isDontShow) {
+      return _profiles.where((p) => p.hidden).toList(growable: false);
+    }
+    final shown = _profiles.where((p) => !p.hidden);
+    if (!_isListTab) return shown.toList(growable: false);
+    final keys = {for (final p in mp.page(_tab).items) p.key};
+    return shown
+        .where((p) =>
+            keys.contains(p.key) || (_tab == MatchTab.online && p.online))
+        .toList(growable: false);
+  }
+
+  void _pickTab(MatchTab t) {
+    setState(() => _tab = t);
+    _loadTabList();
+  }
+
+  /// Loads the member list behind [_tab] (once per screen), then makes sure
+  /// enough search pages are loaded to fill the filtered list.
+  Future<void> _loadTabList() async {
+    final tab = _tab;
+    if (tab == MatchTab.all || tab == MatchTab.dontShow) return;
+    if (_tabsFetched.contains(tab) || _tabsLoading.contains(tab)) {
+      _fillTab();
+      return;
+    }
+    setState(() => _tabsLoading.add(tab));
+    await context.read<MatchesProvider>().loadAll(tab, refresh: true);
+    if (!mounted) return;
+    setState(() {
+      _tabsLoading.remove(tab);
+      if (context.read<MatchesProvider>().page(tab).error == null) {
+        _tabsFetched.add(tab);
+      }
+    });
+    _fillTab();
+  }
+
+  /// A tab may keep only a few of the loaded search results; fetch more
+  /// search pages until it has enough rows or the search runs out.
+  void _fillTab() {
+    if (!mounted || !_isListTab || _tabLoading) return;
+    final rows = _visibleFor(context.read<MatchesProvider>());
+    if (rows.length < 10 && _hasMore) _loadMore();
+  }
 
   // ── Actions ────────────────────────────────────────────────────────────────
+  Future<void> _sendInterest(MatchProfile p) async {
+    final status = interestStatusOf(p);
+    if (status == InterestStatus.awaiting ||
+        status == InterestStatus.accepted) {
+      return;
+    }
+    final mp = context.read<MatchesProvider>();
+    final error = await sendInterestApi(p.apiId);
+    if (error == null) mp.markInterestSent(p);
+    if (!mounted) return;
+    _toast(error ?? 'Interest sent to ${p.name}');
+  }
+
   void _toast(String msg, {VoidCallback? onUndo}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -152,7 +248,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         backgroundColor: AppColors.navy,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        duration: const Duration(milliseconds: 3500),
+        duration: const Duration(seconds: 5),
+        // A snackbar with an action (Undo) stays open by default.
+        persist: false,
         content: Text(msg, style: const TextStyle(fontSize: 13)),
         action: onUndo == null
             ? null
@@ -255,7 +353,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final rows = _visible;
+    final rows = _visibleFor(context.watch<MatchesProvider>());
+    final busy = _loading || (_isListTab && _tabLoading);
 
     return Scaffold(
       backgroundColor: AppColors.bgBottom,
@@ -300,7 +399,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               // Filter chips
               _ResultChips(
                 current: _tab,
-                onPick: (t) => setState(() => _tab = t),
+                onPick: _pickTab,
                 onMore: _openMore,
               ),
               const SizedBox(height: 6),
@@ -327,9 +426,12 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                     Text(
                       _isDontShow
                           ? "Marked As Don't show · ${rows.length}"
-                          : _loading
+                          : busy
                               ? 'Searching…'
-                              : '${_total ?? rows.length} ${(_total ?? rows.length) == 1 ? 'profile' : 'profiles'} found',
+                              : _isListTab
+                                  ? '${_tab.label} · ${rows.length}${_hasMore ? '+' : ''} '
+                                      '${rows.length == 1 ? 'profile' : 'profiles'}'
+                                  : '${_total ?? rows.length} ${(_total ?? rows.length) == 1 ? 'profile' : 'profiles'} found',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -341,7 +443,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                       const DontShowInfo(),
                       const SizedBox(height: 14),
                     ],
-                    if (_loading)
+                    if (busy)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 48),
                         child: Center(
@@ -376,42 +478,80 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                           ],
                         ),
                       )
-                    else if (rows.isEmpty)
+                    else if (_isListTab &&
+                        context.read<MatchesProvider>().page(_tab).error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 48),
+                        child: Column(
+                          children: [
+                            Text(
+                              context.read<MatchesProvider>().page(_tab).error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 14, color: AppColors.textMuted),
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton.icon(
+                              onPressed: _loadTabList,
+                              icon: const Icon(Icons.refresh_rounded,
+                                  color: AppColors.tealMid),
+                              label: const Text(
+                                'Try again',
+                                style: TextStyle(
+                                  color: AppColors.tealMid,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (rows.isEmpty && !_loadingMore)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 48),
                         child: Text(
                           _c.type == SearchType.profileId
                               ? 'No profile found with ID ${_c.values['profileId'] ?? ''}.'
-                              : 'No profiles match these filters.',
+                              : _isListTab
+                                  ? 'None of your search results are in ${_tab.label}.'
+                                  : 'No profiles match these filters.',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                               fontSize: 14, color: AppColors.textMuted),
                         ),
                       ),
-                    for (final p in _loading ? const <MatchProfile>[] : rows) ...[
+                    for (final p in busy ? const <MatchProfile>[] : rows) ...[
                       MatchCard(
                         profile: p,
                         dontShowMode: _isDontShow,
                         onShortlist: () => _toggleShortlist(p),
-                        onInterest: () {
-                          context.read<MatchesProvider>().markInterestSent(p);
-                          setState(() {});
-                          _toast('Interest sent to ${p.name}');
-                        },
-                        onHide: () {
-                          setState(() => p.hidden = true);
-                          _toast('Hidden from your results',
-                              onUndo: () => setState(() => p.hidden = false));
-                        },
-                        onUnhide: () {
-                          setState(() => p.hidden = false);
-                          _toast('${p.name} is back in your results');
-                        },
+                        onInterest: () => _sendInterest(p),
+                        onHide: () => _setHidden(p, hide: true),
+                        onUnhide: () => _setHidden(p, hide: false),
                         onShare: () {/* TODO */},
                         onCall: () {/* TODO */},
                         onWhatsApp: () {/* TODO */},
+                        onRequest: (t) => _sendViewRequest(p, t),
                         onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => const ProfileDetailScreen())), // TODO: pass the member's data
+                            builder: (_) => ProfileDetailScreen(
+                                  profile: MemberProfile.fromMatch(p),
+                                  onDontShow: () async {
+                                    final error = await context
+                                        .read<MatchesProvider>()
+                                        .setHidden(p, hide: true);
+                                    if (error == null && mounted) {
+                                      setState(() => p.hidden = true);
+                                    }
+                                    return error;
+                                  },
+                                  onRequestAccess: (t) async {
+                                    final error = await context
+                                        .read<MatchesProvider>()
+                                        .sendViewRequest(p, t);
+                                    if (mounted) setState(() {});
+                                    return error;
+                                  },
+                                ))),
                       ),
                       const SizedBox(height: 18),
                     ],
